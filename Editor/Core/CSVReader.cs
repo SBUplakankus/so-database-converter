@@ -70,15 +70,15 @@ namespace DataToScriptableObject.Editor
             // Normalize line endings
             csvText = csvText.Replace("\r\n", "\n").Replace("\r", "\n");
 
-            // Extract directives from the prelude (before any data)
+            // Extract directives from the prelude (before CSV data)
+            // Directives must appear at the start, before any non-comment, non-empty lines
             var directives = new List<string>();
-            var csvDataStart = 0;
+            var csvDataLines = new List<string>();
+            var inPrelude = true;
             
             using (var reader = new StringReader(csvText))
             {
                 string line;
-                var inPrelude = true;
-                
                 while ((line = reader.ReadLine()) != null)
                 {
                     var trimmed = line.Trim();
@@ -88,51 +88,59 @@ namespace DataToScriptableObject.Editor
                         if (IsDirective(trimmed))
                         {
                             directives.Add(line);
-                            csvDataStart += line.Length + 1; // +1 for newline
                         }
                         else if (string.IsNullOrWhiteSpace(trimmed) || 
                                 trimmed.StartsWith(commentPrefix) || 
                                 trimmed.StartsWith("//"))
                         {
-                            csvDataStart += line.Length + 1;
+                            // Skip empty lines and comments in prelude
                         }
                         else
                         {
-                            // First non-directive, non-comment, non-empty line = end of prelude
+                            // First non-directive, non-comment, non-empty line marks end of prelude
                             inPrelude = false;
-                            break;
+                            csvDataLines.Add(line);
                         }
+                    }
+                    else
+                    {
+                        // After prelude, collect all lines for TextFieldParser
+                        csvDataLines.Add(line);
                     }
                 }
             }
 
-            // Extract the CSV data portion (after directives)
-            var csvData = csvDataStart < csvText.Length ? csvText.Substring(csvDataStart) : csvText;
+            if (csvDataLines.Count == 0)
+                return EmptyResult(directives.ToArray());
+
+            // Reconstruct CSV data without directives
+            var csvData = string.Join("\n", csvDataLines);
             
             // Auto-detect delimiter if needed
             if (delimiter == "auto")
                 delimiter = DetectDelimiterFromText(csvData, commentPrefix);
             
-            // Convert delimiter to TextFieldParser format
-            var delimiterChar = ConvertDelimiter(delimiter);
-            
-            // Parse CSV using TextFieldParser
+            // Parse CSV using TextFieldParser - let it handle all the complexity
             var parsedLines = new List<string[]>();
             
             using (var reader = new StringReader(csvData))
             using (var parser = new TextFieldParser(reader))
             {
                 parser.TextFieldType = FieldType.Delimited;
-                parser.SetDelimiters(delimiterChar);
+                parser.SetDelimiters(delimiter);
                 parser.HasFieldsEnclosedInQuotes = true;
                 parser.TrimWhiteSpace = false;
                 
-                // Set comment tokens
-                var commentTokens = new List<string>();
+                // Since we've already extracted directives, we still need to skip 
+                // comment lines in the data section (after headers)
                 if (!string.IsNullOrEmpty(commentPrefix))
-                    commentTokens.Add(commentPrefix);
-                commentTokens.Add("//");
-                parser.CommentTokens = commentTokens.ToArray();
+                {
+                    parser.CommentTokens = new[] { commentPrefix, "//" };
+                }
+                else
+                {
+                    parser.CommentTokens = new[] { "//" };
+                }
 
                 while (!parser.EndOfData)
                 {
@@ -144,7 +152,7 @@ namespace DataToScriptableObject.Editor
                     }
                     catch (MalformedLineException)
                     {
-                        // Skip malformed lines
+                        // Skip malformed lines - TextFieldParser will handle most edge cases
                         continue;
                     }
                 }
@@ -245,13 +253,6 @@ namespace DataToScriptableObject.Editor
             }
 
             return delimiterScores.Count == 0 ? "," : delimiterScores.OrderByDescending(kvp => kvp.Value).First().Key;
-        }
-
-        private static string ConvertDelimiter(string delimiter)
-        {
-            // TextFieldParser expects a string array of delimiters
-            // but we return a single delimiter string for SetDelimiters()
-            return delimiter;
         }
 
         private static int CountOccurrences(string line, string delim)
