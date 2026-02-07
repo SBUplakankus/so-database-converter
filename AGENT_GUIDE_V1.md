@@ -886,3 +886,141 @@ Optional lines before the header:
 2. Drag a CSV file into the source field
 3. Review the preview
 4. Click Generate
+---
+
+## Testing and Known Issues
+
+### Test Suite Overview
+- **Total Tests**: 91
+- **Target Pass Rate**: 100%
+- **Current Status**: See `TESTING_GUIDE.md` for detailed testing procedures
+
+### Test Files and Coverage
+```
+Tests/Editor/
+├── NameSanitizerTests.cs (12 tests) - Field/class name sanitization
+├── TypeInferenceTests.cs (11 tests) - Automatic type detection  
+├── TypeConverterTests.cs (10 tests) - String to type conversion
+├── CSVReaderTests.cs (16 tests) - CSV parsing (RFC 4180 compliance)
+├── SchemaBuilderTests.cs (12 tests) - Schema construction from raw data
+├── CodeGeneratorTests.cs (12 tests) - ScriptableObject code generation
+└── GoogleSheetsURLParserTests.cs (11 tests) - Google Sheets URL parsing
+```
+
+### Recently Fixed Issues (2026-02-07)
+
+#### Issue 1: Boolean Type Inference
+**Problem**: TypeInference.cs included "1" and "0" in BooleanValues array, causing numeric columns with only 1s and 0s to be detected as boolean instead of integer.
+
+**Fix**: Removed "1" and "0" from BooleanValues array. Boolean detection now only recognizes: "true", "false", "yes", "no" (case-insensitive).
+
+**Affected Tests**: 
+- TypeInferenceTests.TestBoolWith01
+- SchemaBuilderTests.TestSingleRowHeader
+
+**Code Location**: `Editor/Core/TypeInference.cs`, line 8
+
+#### Issue 2: All-Caps Word Sanitization
+**Problem**: NameSanitizer.ConvertToCase() didn't properly handle all-caps words like "ID", "URL", "API". It would convert "ID" to "iD" instead of "id" for camelCase.
+
+**Fix**: Added detection for all-caps words in ConvertToCase(). For all-caps words:
+- In camelCase (first word): convert entire word to lowercase ("ID" → "id")
+- In PascalCase or subsequent words: capitalize first letter, lowercase the rest ("ID" → "Id")
+
+**Affected Tests**:
+- NameSanitizerTests.TestAllCapsToLower
+
+**Code Location**: `Editor/Core/NameSanitizer.cs`, lines 74-94
+
+#### Issue 3: Schema OriginalHeader Assignment
+**Problem**: SchemaBuilder.CreateColumn() was setting OriginalHeader to rawData.Headers[columnIndex] instead of the normalized header parameter. This caused issues when headers were empty or duplicated.
+
+**Fix**: Changed OriginalHeader assignment to use the normalized `header` parameter that has already been processed by NormalizeHeader().
+
+**Affected Tests**:
+- SchemaBuilderTests.TestDuplicateHeaders
+- SchemaBuilderTests.TestEmptyHeader
+
+**Code Location**: `Editor/Core/SchemaBuilder.cs`, line 123
+
+#### Issue 4: Enum Value Parsing
+**Problem**: ParseFlags() was only collecting the single flag cell value for enum columns. For CSV like `"id,element\nint,enum\n,Fire,Water,Earth\n1,Fire"`, the flags row is parsed to ["", "Fire", "Water", "Earth"], but only "Fire" was being assigned as the enum values.
+
+**Fix**: Changed ParseFlags() signature to accept the entire flags array and column index. For enum types, it now collects all non-empty values from the column index onward in the flags row.
+
+**Affected Tests**:
+- SchemaBuilderTests.TestEnumParsing
+
+**Code Location**: `Editor/Core/SchemaBuilder.cs`, lines 236-256
+
+#### Issue 5: Enum Declaration Generation
+**Problem**: CodeGenerator.GenerateScriptableObject() generated fields with enum types (e.g., `public Element element;`) but never generated the actual enum declaration.
+
+**Fix**: Added enum declaration generation before the class definition. For each enum column, generates:
+```csharp
+public enum {EnumName}
+{
+    Value1,
+    Value2,
+    Value3
+}
+```
+
+**Affected Tests**:
+- CodeGeneratorTests.TestEnumGeneration
+
+**Code Location**: `Editor/Core/CodeGenerator.cs`, lines 59-72
+
+### Testing Best Practices
+
+1. **Run Tests After Core Changes**: Always run relevant test suites after modifying core files:
+   - After changing TypeInference.cs → Run TypeInferenceTests + SchemaBuilderTests
+   - After changing CSVReader.cs → Run CSVReaderTests + SchemaBuilderTests  
+   - After changing SchemaBuilder.cs → Run SchemaBuilderTests + CodeGeneratorTests
+   - After changing CodeGenerator.cs → Run CodeGeneratorTests
+
+2. **Test Priority for Iteration**:
+   - Fast unit tests first (NameSanitizer, TypeInference, TypeConverter) - 1-2 seconds
+   - Medium parser tests (CSVReader, SchemaBuilder) - 2-5 seconds
+   - Slower generator tests (CodeGenerator) - 5-10 seconds
+
+3. **Use Unity Test Runner**: Tests are in EditMode and require Unity Test Runner. They cannot be run with standard C# test frameworks due to Unity dependencies (ScriptableObject, AssetDatabase, etc.).
+
+4. **Test Data Formats**: When writing new tests:
+   - Use realistic CSV formats from `Samples~/CSV/` as reference
+   - Include edge cases: empty cells, quoted fields, special characters
+   - Test multi-row headers (1-row, 2-row, 3-row formats)
+   - Include directive tests (#class:, #namespace:, #database:)
+
+### Common Development Gotchas
+
+1. **Enum Type Detection**: Enum types must be explicitly declared in the type hints row (row 2). They cannot be auto-inferred. The enum values are then listed in the flags row (row 3).
+
+2. **CSV Delimiter vs Enum Values**: When using comma as CSV delimiter and defining enum values in the flags row, the individual enum values become separate columns in the parsed CSV. The ParseFlags logic accounts for this by collecting all remaining values.
+
+3. **Header Normalization**: Empty and duplicate headers are automatically normalized:
+   - Empty: `column_0`, `column_1`, `column_2`
+   - Duplicate: `name`, `name_2`, `name_3`
+   - The OriginalHeader field stores the normalized name, not the raw CSV value.
+
+4. **Type Inference Priority**: When type hints are not provided, inference attempts in order:
+   - Boolean (true/false/yes/no only - not 1/0)
+   - Integer (whole numbers)
+   - Float (decimal numbers)
+   - String (fallback)
+
+5. **Reserved Keywords**: C# reserved words are automatically suffixed with underscore:
+   - `class` → `class_`
+   - `namespace` → `namespace_`
+   - `int` → `int_`
+
+### Test Result Files
+
+Test results are saved as XML files in the repository root with format:
+```
+TestResults_YYYYMMDD_HHMMSS.xml
+```
+
+These files can be parsed to extract failure details for debugging. See `TESTING_GUIDE.md` for parsing examples.
+
+---
