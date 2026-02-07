@@ -49,6 +49,11 @@ namespace DataToScriptableObject.Editor
                 return true;
 
             var trimmed = line.Trim();
+            
+            // Directives are not ignorable - they must be processed
+            if (IsDirective(trimmed))
+                return false;
+            
             return trimmed.StartsWith(commentPrefix) || trimmed.StartsWith("//");
         }
         

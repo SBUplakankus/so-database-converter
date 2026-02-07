@@ -75,6 +75,7 @@ namespace DataToScriptableObject.Editor
         {
             input = input.Replace('-', ' ');
             input = input.Replace('_', ' ');
+            input = input.Replace('\t', ' ');
             
             var words = input.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
             
