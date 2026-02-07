@@ -228,5 +228,463 @@ namespace DataToScriptableObject.Tests.Editor
             Assert.IsTrue(code.Contains("public class ItemDatabase"));
             Assert.IsTrue(code.Contains("List<Item>"));
         }
+
+        // ==================== DIAGNOSTIC TESTS ====================
+
+        #region Enum Generation Diagnostics
+
+        [Test]
+        public void TestEnumDeclarationGenerated()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema
+                {
+                    FieldName = "status",
+                    OriginalHeader = "status",
+                    Type = ResolvedType.Enum,
+                    EnumValues = new[] { "Active", "Inactive" },
+                    Attributes = new System.Collections.Generic.Dictionary<string, string>()
+                }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public enum Status"));
+            Assert.IsTrue(code.Contains("Active"));
+            Assert.IsTrue(code.Contains("Inactive"));
+        }
+
+        [Test]
+        public void TestEnumWithManyValues()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema
+                {
+                    FieldName = "rarity",
+                    OriginalHeader = "rarity",
+                    Type = ResolvedType.Enum,
+                    EnumValues = new[] { "Common", "Uncommon", "Rare", "Epic", "Legendary" },
+                    Attributes = new System.Collections.Generic.Dictionary<string, string>()
+                }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("Common"));
+            Assert.IsTrue(code.Contains("Uncommon"));
+            Assert.IsTrue(code.Contains("Rare"));
+            Assert.IsTrue(code.Contains("Epic"));
+            Assert.IsTrue(code.Contains("Legendary"));
+        }
+
+        [Test]
+        public void TestMultipleEnumColumns()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema
+                {
+                    FieldName = "element",
+                    OriginalHeader = "element",
+                    Type = ResolvedType.Enum,
+                    EnumValues = new[] { "Fire", "Water", "Earth" },
+                    Attributes = new System.Collections.Generic.Dictionary<string, string>()
+                },
+                new ColumnSchema
+                {
+                    FieldName = "rarity",
+                    OriginalHeader = "rarity",
+                    Type = ResolvedType.Enum,
+                    EnumValues = new[] { "Common", "Rare" },
+                    Attributes = new System.Collections.Generic.Dictionary<string, string>()
+                }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("enum Element"));
+            Assert.IsTrue(code.Contains("enum Rarity"));
+        }
+
+        #endregion
+
+        #region Field Generation Diagnostics
+
+        [Test]
+        public void TestAllBasicTypes()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "intField", Type = ResolvedType.Int, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "floatField", Type = ResolvedType.Float, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "doubleField", Type = ResolvedType.Double, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "longField", Type = ResolvedType.Long, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "boolField", Type = ResolvedType.Bool, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "stringField", Type = ResolvedType.String, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public int intField"));
+            Assert.IsTrue(code.Contains("public float floatField"));
+            Assert.IsTrue(code.Contains("public double doubleField"));
+            Assert.IsTrue(code.Contains("public long longField"));
+            Assert.IsTrue(code.Contains("public bool boolField"));
+            Assert.IsTrue(code.Contains("public string stringField"));
+        }
+
+        [Test]
+        public void TestVectorTypes()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "position", Type = ResolvedType.Vector2, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "direction", Type = ResolvedType.Vector3, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public Vector2 position"));
+            Assert.IsTrue(code.Contains("public Vector3 direction"));
+        }
+
+        [Test]
+        public void TestColorType()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "tint", Type = ResolvedType.Color, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public Color tint"));
+        }
+
+        [Test]
+        public void TestSkippedColumns()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "id", Type = ResolvedType.Int, IsSkipped = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "temp", Type = ResolvedType.String, IsSkipped = true, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "name", Type = ResolvedType.String, IsSkipped = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public int id"));
+            Assert.IsFalse(code.Contains("temp"));
+            Assert.IsTrue(code.Contains("public string name"));
+        }
+
+        #endregion
+
+        #region Array and List Diagnostics
+
+        [Test]
+        public void TestFloatArray()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "values", Type = ResolvedType.FloatArray, IsList = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("float[]"));
+        }
+
+        [Test]
+        public void TestStringArray()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "tags", Type = ResolvedType.StringArray, IsList = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("string[]"));
+        }
+
+        [Test]
+        public void TestBoolArray()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "flags", Type = ResolvedType.BoolArray, IsList = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("bool[]"));
+        }
+
+        [Test]
+        public void TestListVsArray()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "asList", Type = ResolvedType.IntArray, IsList = true, Attributes = new System.Collections.Generic.Dictionary<string, string>() },
+                new ColumnSchema { FieldName = "asArray", Type = ResolvedType.IntArray, IsList = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+            settings.UseListInsteadOfArray = false;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("List<int> asList"));
+            Assert.IsTrue(code.Contains("int[] asArray"));
+        }
+
+        [Test]
+        public void TestUseListInsteadOfArraySetting()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "values", Type = ResolvedType.IntArray, IsList = false, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+            settings.UseListInsteadOfArray = true;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("List<int>"));
+        }
+
+        #endregion
+
+        #region Attribute Generation Diagnostics
+
+        [Test]
+        public void TestHideInInspector()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns[0].Attributes["hide"] = "";
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("[HideInInspector]"));
+        }
+
+        [Test]
+        public void TestHeaderAttribute()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns[0].Attributes["header"] = "Main Stats";
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("[Header(\"Main Stats\")]"));
+        }
+
+        [Test]
+        public void TestMultipleAttributes()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns[0].Attributes["tooltip"] = "Test tooltip";
+            schema.Columns[0].Attributes["range"] = "0,100";
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("[Tooltip(\"Test tooltip\")]"));
+            Assert.IsTrue(code.Contains("[Range(0f, 100f)]"));
+        }
+
+        [Test]
+        public void TestTooltipDisabled()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns[0].Attributes["tooltip"] = "Test";
+            var settings = GetDefaultSettings();
+            settings.GenerateTooltips = false;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsFalse(code.Contains("Tooltip"));
+        }
+
+        #endregion
+
+        #region Namespace and Class Diagnostics
+
+        [Test]
+        public void TestNestedNamespace()
+        {
+            var schema = CreateBasicSchema();
+            schema.NamespaceName = "Game.Data.Items";
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("namespace Game.Data.Items"));
+        }
+
+        [Test]
+        public void TestNoNamespace()
+        {
+            var schema = CreateBasicSchema();
+            schema.NamespaceName = "";
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsFalse(code.Contains("namespace {"));
+        }
+
+        [Test]
+        public void TestClassInheritance()
+        {
+            var schema = CreateBasicSchema();
+            var settings = GetDefaultSettings();
+            settings.SerializableClassMode = false;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains(": ScriptableObject"));
+        }
+
+        [Test]
+        public void TestSerializableAttribute()
+        {
+            var schema = CreateBasicSchema();
+            var settings = GetDefaultSettings();
+            settings.SerializableClassMode = true;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("[System.Serializable]"));
+        }
+
+        [Test]
+        public void TestCreateAssetMenuDisabled()
+        {
+            var schema = CreateBasicSchema();
+            var settings = GetDefaultSettings();
+            settings.GenerateCreateAssetMenu = false;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsFalse(code.Contains("[CreateAssetMenu"));
+        }
+
+        [Test]
+        public void TestAutoGeneratedHeaderDisabled()
+        {
+            var schema = CreateBasicSchema();
+            var settings = GetDefaultSettings();
+            settings.AddAutoGeneratedHeader = false;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsFalse(code.Contains("Auto-generated"));
+        }
+
+        #endregion
+
+        #region SerializeField Mode Diagnostics
+
+        [Test]
+        public void TestSerializeFieldWithPropertyAccessor()
+        {
+            var schema = CreateBasicSchema();
+            var settings = GetDefaultSettings();
+            settings.UseSerializeField = true;
+            settings.GeneratePropertyAccessors = true;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("[SerializeField] private"));
+            Assert.IsTrue(code.Contains("public int Id =>"));
+        }
+
+        [Test]
+        public void TestSerializeFieldWithoutPropertyAccessor()
+        {
+            var schema = CreateBasicSchema();
+            var settings = GetDefaultSettings();
+            settings.UseSerializeField = true;
+            settings.GeneratePropertyAccessors = false;
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("[SerializeField] private"));
+            Assert.IsFalse(code.Contains(" => "));
+        }
+
+        #endregion
+
+        #region Edge Cases
+
+        [Test]
+        public void TestEmptyColumns()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new ColumnSchema[0];
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public class Item"));
+        }
+
+        [Test]
+        public void TestSingleColumn()
+        {
+            var schema = CreateBasicSchema();
+            schema.Columns = new[]
+            {
+                new ColumnSchema { FieldName = "id", Type = ResolvedType.Int, Attributes = new System.Collections.Generic.Dictionary<string, string>() }
+            };
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateScriptableObject(schema, settings);
+
+            Assert.IsTrue(code.Contains("public int id"));
+        }
+
+        [Test]
+        public void TestDatabaseClassName()
+        {
+            var schema = CreateBasicSchema();
+            schema.ClassName = "Weapon";
+            schema.DatabaseName = "WeaponDatabase";
+            var settings = GetDefaultSettings();
+
+            string code = CodeGenerator.GenerateDatabaseClass(schema, settings);
+
+            Assert.IsTrue(code.Contains("public class WeaponDatabase"));
+            Assert.IsTrue(code.Contains("List<Weapon>"));
+        }
+
+        #endregion
     }
 }
