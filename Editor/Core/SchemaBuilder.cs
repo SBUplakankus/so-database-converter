@@ -120,7 +120,7 @@ namespace DataToScriptableObject.Editor
         {
             var column = new ColumnSchema
             {
-                OriginalHeader = rawData.Headers[columnIndex],
+                OriginalHeader = header,
                 FieldName = settings.SanitizeFieldNames 
                     ? NameSanitizer.SanitizeFieldName(header) 
                     : header,

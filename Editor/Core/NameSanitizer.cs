@@ -85,10 +85,25 @@ namespace DataToScriptableObject.Editor
             {
                 if (words[i].Length <= 0) continue;
                 
+                // Check if word is all uppercase (like "ID", "URL", etc.)
+                bool isAllCaps = words[i].Length > 1 && words[i].All(char.IsUpper);
+                
                 if (i == 0 && namingCase == NamingCase.CamelCase)
-                    words[i] = char.ToLowerInvariant(words[i][0]) + words[i].Substring(1);
+                {
+                    // For camelCase, convert all-caps words to lowercase
+                    if (isAllCaps)
+                        words[i] = words[i].ToLowerInvariant();
+                    else
+                        words[i] = char.ToLowerInvariant(words[i][0]) + words[i].Substring(1);
+                }
                 else
-                    words[i] = char.ToUpperInvariant(words[i][0]) + words[i].Substring(1);
+                {
+                    // For PascalCase or non-first words, keep first char upper, rest as-is unless all-caps
+                    if (isAllCaps)
+                        words[i] = char.ToUpperInvariant(words[i][0]) + words[i].Substring(1).ToLowerInvariant();
+                    else
+                        words[i] = char.ToUpperInvariant(words[i][0]) + words[i].Substring(1);
+                }
             }
 
             return string.Concat(words);

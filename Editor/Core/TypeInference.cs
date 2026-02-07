@@ -5,7 +5,7 @@ namespace DataToScriptableObject.Editor
 {
     public static class TypeInference
     {
-        private static readonly string[] BooleanValues = { "true", "false", "yes", "no", "1", "0" };
+        private static readonly string[] BooleanValues = { "true", "false", "yes", "no" };
 
         public static ResolvedType Infer(string[] values)
         {
