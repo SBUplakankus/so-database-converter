@@ -347,14 +347,14 @@ namespace DataToScriptableObject.Tests.Editor
         [Test]
         public void TestRealWorldItemTable()
         {
-            string csv = @"#class:GameItem
-#namespace:Game.Data
-id,name,description,price,stackable,category
-int,string,string,float,bool,enum
-key,name,tooltip(Item description),,optional,Common,Uncommon,Rare,Epic,Legendary
-1,Health Potion,Restores 50 HP,10.5,true,Common
-2,Sword of Fire,A flaming sword,100.0,false,Rare
-3,Magic Staff,Powerful magic weapon,250.0,false,Epic";
+            string csv = "#class:GameItem\n" +
+                "#namespace:Game.Data\n" +
+                "id,name,description,price,stackable,category\n" +
+                "int,string,string,float,bool,enum\n" +
+                "key,name,tooltip(Item description),,optional,Common,Uncommon,Rare,Epic,Legendary\n" +
+                "1,Health Potion,Restores 50 HP,10.5,true,Common\n" +
+                "2,Sword of Fire,A flaming sword,100.0,false,Rare\n" +
+                "3,Magic Staff,Powerful magic weapon,250.0,false,Epic";
 
             var rawData = CSVReader.Parse(csv, ",", "#", 3);
             var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
@@ -374,12 +374,12 @@ key,name,tooltip(Item description),,optional,Common,Uncommon,Rare,Epic,Legendary
         [Test]
         public void TestRealWorldCharacterStats()
         {
-            string csv = @"id,class,hp,attack,defense,speed
-int,enum,int,int,int,int
-key,Warrior,Mage,Rogue,,,
-1,Warrior,100,15,10,5
-2,Mage,60,20,5,8
-3,Rogue,80,12,7,15";
+            string csv = "id,class,hp,attack,defense,speed\n" +
+                "int,enum,int,int,int,int\n" +
+                "key,Warrior,Mage,Rogue,,,\n" +
+                "1,Warrior,100,15,10,5\n" +
+                "2,Mage,60,20,5,8\n" +
+                "3,Rogue,80,12,7,15";
 
             var rawData = CSVReader.Parse(csv, ",", "#", 3);
             var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());

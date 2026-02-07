@@ -336,6 +336,14 @@ namespace DataToScriptableObject.Tests.Editor
             
             Assert.AreEqual(ResolvedType.Enum, schema.Columns[1].Type);
             Assert.IsNotNull(schema.Columns[1].EnumValues);
+            // Verify actual enum values are parsed correctly
+            Assert.GreaterOrEqual(schema.Columns[1].EnumValues.Length, 1, "Should have at least one enum value");
+            Assert.IsTrue(
+                schema.Columns[1].EnumValues.Contains("Active") ||
+                schema.Columns[1].EnumValues.Contains("Inactive") ||
+                schema.Columns[1].EnumValues.Contains("Pending"),
+                "Should contain at least one of the expected enum values"
+            );
         }
 
         #endregion
