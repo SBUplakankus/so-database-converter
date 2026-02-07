@@ -1,0 +1,11 @@
+#class:ItemEntry
+#database:ItemDatabase
+#namespace:Game.Data
+id,name,description,damage,element,tags,icon,isStackable,maxStack
+int,string,string,float,enum,string[],sprite,bool,int
+key,name,optional,"range(0;100)","Fire,Water,Earth,None",list,,,"range(1;99)"
+1,Sword,A sharp blade,10.5,Fire,melee;sharp,Assets/Samples/Icons/sword.png,false,1
+2,Bow,A ranged weapon,7.2,Water,ranged;wooden,Assets/Samples/Icons/bow.png,false,1
+3,Arrow,null,2.0,None,ranged;ammo,,true,64
+4,Staff,A magical staff,15.0,Earth,magic;wooden,Assets/Samples/Icons/staff.png,false,1
+5,Potion,Restores health,0.0,None,consumable;magic,,true,16
