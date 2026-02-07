@@ -59,7 +59,7 @@ namespace DataToScriptableObject.Editor
             return false;
         }
         
-        private static List<Dictionary<string, string>> BuildRowDictionaries(RawTableData rawData)
+        private static List<Dictionary<string, string>> BuildRowDictionaries(RawTableData rawData, ColumnSchema[] columns)
         {
             var rows = new List<Dictionary<string, string>>();
     
@@ -67,14 +67,12 @@ namespace DataToScriptableObject.Editor
             {
                 var rowDict = new Dictionary<string, string>();
         
-                for (var i = 0; i < rawData.Headers.Length; i++)
+                for (var i = 0; i < columns.Length; i++)
                 {
-                    var header = string.IsNullOrWhiteSpace(rawData.Headers[i]) 
-                        ? $"column_{i}" 
-                        : rawData.Headers[i];
-            
+                    // Use the FieldName from the column schema for dictionary keys
+                    var key = columns[i].FieldName;
                     var value = i < dataRow.Length ? dataRow[i] : "";
-                    rowDict[header] = value;
+                    rowDict[key] = value;
                 }
         
                 rows.Add(rowDict);
@@ -116,14 +114,14 @@ namespace DataToScriptableObject.Editor
             return newHeader;
         }
 
-        private static ColumnSchema CreateColumn(RawTableData rawData, TableSchema schema, GenerationSettings settings, int columnIndex, string header)
+        private static ColumnSchema CreateColumn(RawTableData rawData, TableSchema schema, GenerationSettings settings, int columnIndex, string normalizedHeader, string originalHeader)
         {
             var column = new ColumnSchema
             {
-                OriginalHeader = header,
+                OriginalHeader = originalHeader,
                 FieldName = settings.SanitizeFieldNames 
-                    ? NameSanitizer.SanitizeFieldName(header) 
-                    : header,
+                    ? NameSanitizer.SanitizeFieldName(normalizedHeader) 
+                    : normalizedHeader,
                 Attributes = new Dictionary<string, string>()
             };
 
@@ -168,7 +166,7 @@ namespace DataToScriptableObject.Editor
             }
 
             schema.Columns = BuildColumns(rawData, schema, settings);
-            schema.Rows = BuildRowDictionaries(rawData);
+            schema.Rows = BuildRowDictionaries(rawData, schema.Columns);
 
             return schema;
         }
@@ -180,10 +178,11 @@ namespace DataToScriptableObject.Editor
 
             for (var i = 0; i < rawData.Headers.Length; i++)
             {
-                var header = NormalizeHeader(rawData.Headers[i], i, headerMap, schema);
-                headerMap[header] = i;
+                var originalHeader = rawData.Headers[i];
+                var normalizedHeader = NormalizeHeader(originalHeader, i, headerMap, schema);
+                headerMap[normalizedHeader] = i;
 
-                var column = CreateColumn(rawData, schema, settings, i, header);
+                var column = CreateColumn(rawData, schema, settings, i, normalizedHeader, originalHeader);
                 columns.Add(column);
             }
 
