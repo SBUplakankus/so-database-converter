@@ -78,7 +78,11 @@ namespace DataToScriptableObject.Editor
 
         public static string ToString(string value, string nullToken)
         {
-            if (value == nullToken || value == null)
+            if (value == null)
+                return null;
+            
+            // Case-insensitive null token comparison
+            if (nullToken != null && string.Equals(value, nullToken, StringComparison.OrdinalIgnoreCase))
                 return null;
             
             return value;
@@ -176,9 +180,11 @@ namespace DataToScriptableObject.Editor
 
         public static T[] ToArray<T>(string value, string delimiter, Func<string, T> elementConverter)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            // Null values return an empty array.
+            // Empty or whitespace strings produce an array with one element (matching CSV behavior).
+            if (value == null)
                 return Array.Empty<T>();
-
+            
             var parts = value.Split(new[] { delimiter }, StringSplitOptions.None);
             var result = new T[parts.Length];
 

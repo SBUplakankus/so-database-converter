@@ -14,7 +14,7 @@ namespace DataToScriptableObject.Editor
             new Regex(@"[?&#]gid=(\d+)", RegexOptions.Compiled);
 
         private static readonly Regex RawIdRegex =
-            new Regex(@"^[a-zA-Z0-9_-]{20,}$", RegexOptions.Compiled);
+            new Regex(@"^[a-zA-Z0-9_-]{4,}$", RegexOptions.Compiled);
 
         public static string BuildExportURL(string spreadsheetId, string gid)
         {

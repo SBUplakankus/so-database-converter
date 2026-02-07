@@ -49,6 +49,11 @@ namespace DataToScriptableObject.Editor
                 return true;
 
             var trimmed = line.Trim();
+            
+            // Directives are not ignorable - they must be processed
+            if (IsDirective(trimmed))
+                return false;
+            
             return trimmed.StartsWith(commentPrefix) || trimmed.StartsWith("//");
         }
         
@@ -163,7 +168,8 @@ namespace DataToScriptableObject.Editor
 
             if (headerRowCount >= 3 && parsedLines.Count > currentRow)
             {
-                result.Flags = NormalizeRow(parsedLines[currentRow], columnCount);
+                // Don't normalize flags row - it may have extra columns for enum values
+                result.Flags = parsedLines[currentRow];
                 currentRow++;
             }
 
