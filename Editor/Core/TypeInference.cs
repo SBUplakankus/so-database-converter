@@ -1,4 +1,3 @@
-using DataToScriptableObject;
 using System.Globalization;
 using System.Linq;
 
@@ -6,6 +5,8 @@ namespace DataToScriptableObject.Editor
 {
     public static class TypeInference
     {
+        private static readonly string[] BooleanValues = { "true", "false", "yes", "no", "1", "0" };
+
         public static ResolvedType Infer(string[] values)
         {
             if (values == null || values.Length == 0)
@@ -16,49 +17,48 @@ namespace DataToScriptableObject.Editor
             if (nonEmptyValues.Length == 0)
                 return ResolvedType.String;
 
+            if (TryInferBool(nonEmptyValues))
+                return ResolvedType.Bool;
+
             if (TryInferInt(nonEmptyValues))
                 return ResolvedType.Int;
 
             if (TryInferFloat(nonEmptyValues))
                 return ResolvedType.Float;
 
-            if (TryInferBool(nonEmptyValues))
-                return ResolvedType.Bool;
-
             return ResolvedType.String;
         }
 
         private static bool TryInferInt(string[] values)
         {
-            foreach (var value in values)
-            {
-                if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
-                    return false;
-            }
-            return true;
+            return values.All(v => int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out _));
         }
 
         private static bool TryInferFloat(string[] values)
         {
-            foreach (var value in values)
-            {
-                if (!float.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _))
-                    return false;
-            }
-            return true;
+            return values.All(v => float.TryParse(v, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _));
         }
 
         private static bool TryInferBool(string[] values)
         {
-            foreach (var value in values)
+            return values.All(v => BooleanValues.Contains(v.ToLowerInvariant()));
+        }
+        
+        private static bool TryInferVector2(string[] values)
+        {
+            return values.All(v =>
             {
-                string lower = value.ToLowerInvariant();
-                if (lower != "true" && lower != "false" && 
-                    lower != "yes" && lower != "no" && 
-                    lower != "1" && lower != "0")
-                    return false;
-            }
-            return true;
+                var trimmed = v.Trim().Trim('(', ')');
+                var parts = trimmed.Split(',');
+                return parts.Length == 2 && parts.All(p => float.TryParse(p.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _));
+            });
+        }
+
+        private static bool TryInferColor(string[] values)
+        {
+            return values.All(v => 
+                v.Trim().StartsWith("#") || 
+                v.Split(',').Length >= 3);
         }
     }
 }

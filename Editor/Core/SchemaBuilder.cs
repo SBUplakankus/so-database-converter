@@ -1,4 +1,4 @@
-using DataToScriptableObject;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -6,140 +6,213 @@ namespace DataToScriptableObject.Editor
 {
     public static class SchemaBuilder
     {
+        #region Fields
+
+        private static readonly Dictionary<string, ResolvedType> TypeHintMap = new Dictionary<string, ResolvedType>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "int", ResolvedType.Int },
+            { "float", ResolvedType.Float },
+            { "double", ResolvedType.Double },
+            { "long", ResolvedType.Long },
+            { "bool", ResolvedType.Bool },
+            { "string", ResolvedType.String },
+            { "enum", ResolvedType.Enum },
+            { "vector2", ResolvedType.Vector2 },
+            { "vector3", ResolvedType.Vector3 },
+            { "color", ResolvedType.Color },
+            { "sprite", ResolvedType.Sprite },
+            { "prefab", ResolvedType.Prefab },
+            { "asset", ResolvedType.Asset },
+            { "int[]", ResolvedType.IntArray },
+            { "float[]", ResolvedType.FloatArray },
+            { "string[]", ResolvedType.StringArray },
+            { "bool[]", ResolvedType.BoolArray }
+        };
+
+        #endregion
+        
+        #region Helper Methods
+
+        private static bool TryParseDirective(string directive, string prefix, out string value)
+        {
+            if (directive.StartsWith(prefix))
+            {
+                value = directive.Substring(prefix.Length).Trim();
+                return !string.IsNullOrEmpty(value);
+            }
+            value = null;
+            return false;
+        }
+        
+        private static bool TryParseAttributeFlag(string flag, string name, out string value)
+        {
+            var prefix = $"{name}(";
+            var lowerFlag = flag.ToLowerInvariant();
+    
+            if (lowerFlag.StartsWith(prefix) && lowerFlag.EndsWith(")"))
+            {
+                value = flag.Substring(prefix.Length, flag.Length - prefix.Length - 1);
+                return true;
+            }
+    
+            value = null;
+            return false;
+        }
+        
+        private static List<Dictionary<string, string>> BuildRowDictionaries(RawTableData rawData)
+        {
+            var rows = new List<Dictionary<string, string>>();
+    
+            foreach (var dataRow in rawData.DataRows)
+            {
+                var rowDict = new Dictionary<string, string>();
+        
+                for (var i = 0; i < rawData.Headers.Length; i++)
+                {
+                    var header = string.IsNullOrWhiteSpace(rawData.Headers[i]) 
+                        ? $"column_{i}" 
+                        : rawData.Headers[i];
+            
+                    var value = i < dataRow.Length ? dataRow[i] : "";
+                    rowDict[header] = value;
+                }
+        
+                rows.Add(rowDict);
+            }
+    
+            return rows;
+        }
+        
+        private static string NormalizeHeader(string header, int columnIndex, Dictionary<string, int> headerMap, TableSchema schema)
+        {
+            if (string.IsNullOrWhiteSpace(header))
+            {
+                header = $"column_{columnIndex}";
+                schema.Warnings.Add(new ValidationWarning
+                {
+                    level = WarningLevel.Warning,
+                    message = $"Empty header at column {columnIndex}, using '{header}'"
+                });
+                return header;
+            }
+
+            if (!headerMap.ContainsKey(header))
+                return header;
+
+            var count = 2;
+            string newHeader;
+            do
+            {
+                newHeader = $"{header}_{count++}";
+            }
+            while (headerMap.ContainsKey(newHeader));
+
+            schema.Warnings.Add(new ValidationWarning
+            {
+                level = WarningLevel.Warning,
+                message = $"Duplicate header '{header}', renamed to '{newHeader}'"
+            });
+
+            return newHeader;
+        }
+
+        private static ColumnSchema CreateColumn(RawTableData rawData, TableSchema schema, GenerationSettings settings, int columnIndex, string header)
+        {
+            var column = new ColumnSchema
+            {
+                OriginalHeader = rawData.Headers[columnIndex],
+                FieldName = settings.SanitizeFieldNames 
+                    ? NameSanitizer.SanitizeFieldName(header) 
+                    : header,
+                Attributes = new Dictionary<string, string>()
+            };
+
+            if (rawData.TypeHints != null && columnIndex < rawData.TypeHints.Length)
+            {
+                column.Type = ParseTypeHint(rawData.TypeHints[columnIndex], schema);
+            }
+            else
+            {
+                var columnValues = rawData.DataRows
+                    .Select(row => columnIndex < row.Length ? row[columnIndex] : "")
+                    .ToArray();
+                column.Type = TypeInference.Infer(columnValues);
+            }
+
+            if (rawData.Flags != null && columnIndex < rawData.Flags.Length)
+            {
+                ParseFlags(rawData.Flags[columnIndex], column, schema);
+            }
+
+            return column;
+        }
+        
+        #endregion
+        
+        #region Build Methods
+        
         public static TableSchema Build(RawTableData rawData, GenerationSettings settings)
         {
             var schema = new TableSchema
             {
-                warnings = new List<ValidationWarning>()
+                Warnings = new List<ValidationWarning>()
             };
 
             ExtractDirectives(rawData, schema, settings);
 
-            if (rawData.headers == null || rawData.headers.Length == 0)
+            if (rawData.Headers == null || rawData.Headers.Length == 0)
             {
-                schema.columns = new ColumnSchema[0];
-                schema.rows = new List<Dictionary<string, string>>();
+                schema.Columns = Array.Empty<ColumnSchema>();
+                schema.Rows = new List<Dictionary<string, string>>();
                 return schema;
             }
 
-            var columns = new List<ColumnSchema>();
-            var headerMap = new Dictionary<string, int>();
-
-            for (int i = 0; i < rawData.headers.Length; i++)
-            {
-                string header = rawData.headers[i];
-                string originalHeader = header;
-
-                if (string.IsNullOrWhiteSpace(header))
-                {
-                    header = $"column_{i}";
-                    schema.warnings.Add(new ValidationWarning
-                    {
-                        level = WarningLevel.Warning,
-                        message = $"Empty header at column {i}, using '{header}'"
-                    });
-                }
-
-                if (headerMap.ContainsKey(header))
-                {
-                    int count = 2;
-                    string newHeader = $"{header}_{count}";
-                    while (headerMap.ContainsKey(newHeader))
-                    {
-                        count++;
-                        newHeader = $"{header}_{count}";
-                    }
-                    schema.warnings.Add(new ValidationWarning
-                    {
-                        level = WarningLevel.Warning,
-                        message = $"Duplicate header '{header}', renamed to '{newHeader}'"
-                    });
-                    header = newHeader;
-                }
-
-                headerMap[header] = i;
-
-                var column = new ColumnSchema
-                {
-                    originalHeader = string.IsNullOrWhiteSpace(originalHeader) ? header : originalHeader,
-                    fieldName = settings.sanitizeFieldNames ? NameSanitizer.SanitizeFieldName(header) : header,
-                    attributes = new Dictionary<string, string>()
-                };
-
-                if (rawData.typeHints != null && i < rawData.typeHints.Length)
-                {
-                    column.resolvedType = ParseTypeHint(rawData.typeHints[i], schema);
-                }
-                else
-                {
-                    var columnValues = rawData.dataRows.Select(row => i < row.Length ? row[i] : "").ToArray();
-                    column.resolvedType = TypeInference.Infer(columnValues);
-                }
-
-                if (rawData.flags != null && i < rawData.flags.Length)
-                {
-                    ParseFlags(rawData.flags[i], column, schema);
-                }
-
-                columns.Add(column);
-            }
-
-            schema.columns = columns.ToArray();
-
-            schema.rows = new List<Dictionary<string, string>>();
-            foreach (var dataRow in rawData.dataRows)
-            {
-                var rowDict = new Dictionary<string, string>();
-                for (int i = 0; i < rawData.headers.Length; i++)
-                {
-                    string header = rawData.headers[i];
-                    if (string.IsNullOrWhiteSpace(header))
-                        header = $"column_{i}";
-                    
-                    string value = i < dataRow.Length ? dataRow[i] : "";
-                    rowDict[header] = value;
-                }
-                schema.rows.Add(rowDict);
-            }
+            schema.Columns = BuildColumns(rawData, schema, settings);
+            schema.Rows = BuildRowDictionaries(rawData);
 
             return schema;
         }
 
+        private static ColumnSchema[] BuildColumns(RawTableData rawData, TableSchema schema, GenerationSettings settings)
+        {
+            var columns = new List<ColumnSchema>();
+            var headerMap = new Dictionary<string, int>();
+
+            for (var i = 0; i < rawData.Headers.Length; i++)
+            {
+                var header = NormalizeHeader(rawData.Headers[i], i, headerMap, schema);
+                headerMap[header] = i;
+
+                var column = CreateColumn(rawData, schema, settings, i, header);
+                columns.Add(column);
+            }
+
+            return columns.ToArray();
+        }
+
         private static void ExtractDirectives(RawTableData rawData, TableSchema schema, GenerationSettings settings)
         {
-            schema.className = settings.className;
-            schema.databaseName = settings.databaseName;
-            schema.namespaceName = settings.namespaceName;
+            schema.ClassName = settings.ClassName;
+            schema.DatabaseName = settings.DatabaseName;
+            schema.NamespaceName = settings.NamespaceName;
 
-            if (rawData.directives != null)
+            if (rawData.Directives != null)
             {
-                foreach (var directive in rawData.directives)
+                foreach (var directive in rawData.Directives)
                 {
-                    if (directive.StartsWith("#class:"))
-                    {
-                        string value = directive.Substring("#class:".Length).Trim();
-                        if (!string.IsNullOrEmpty(value))
-                            schema.className = value;
-                    }
-                    else if (directive.StartsWith("#database:"))
-                    {
-                        string value = directive.Substring("#database:".Length).Trim();
-                        if (!string.IsNullOrEmpty(value))
-                            schema.databaseName = value;
-                    }
-                    else if (directive.StartsWith("#namespace:"))
-                    {
-                        string value = directive.Substring("#namespace:".Length).Trim();
-                        if (!string.IsNullOrEmpty(value))
-                            schema.namespaceName = value;
-                    }
+                    if (TryParseDirective(directive, "#class:", out var className))
+                        schema.ClassName = className;
+                    else if (TryParseDirective(directive, "#database:", out var databaseName))
+                        schema.DatabaseName = databaseName;
+                    else if (TryParseDirective(directive, "#namespace:", out var namespaceName))
+                        schema.NamespaceName = namespaceName;
                 }
             }
 
-            if (string.IsNullOrEmpty(schema.className))
-                schema.className = "GeneratedEntry";
-            if (string.IsNullOrEmpty(schema.databaseName))
-                schema.databaseName = schema.className + "Database";
+            if (string.IsNullOrEmpty(schema.ClassName))
+                schema.ClassName = "GeneratedEntry";
+            if (string.IsNullOrEmpty(schema.DatabaseName))
+                schema.DatabaseName = schema.ClassName + "Database";
         }
 
         private static ResolvedType ParseTypeHint(string typeHint, TableSchema schema)
@@ -147,35 +220,17 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrWhiteSpace(typeHint))
                 return ResolvedType.String;
 
-            string hint = typeHint.Trim().ToLowerInvariant();
+            var hint = typeHint.Trim();
+    
+            if (TypeHintMap.TryGetValue(hint, out var type))
+                return type;
 
-            switch (hint)
+            schema.Warnings.Add(new ValidationWarning
             {
-                case "int": return ResolvedType.Int;
-                case "float": return ResolvedType.Float;
-                case "double": return ResolvedType.Double;
-                case "long": return ResolvedType.Long;
-                case "bool": return ResolvedType.Bool;
-                case "string": return ResolvedType.String;
-                case "enum": return ResolvedType.Enum;
-                case "vector2": return ResolvedType.Vector2;
-                case "vector3": return ResolvedType.Vector3;
-                case "color": return ResolvedType.Color;
-                case "sprite": return ResolvedType.Sprite;
-                case "prefab": return ResolvedType.Prefab;
-                case "asset": return ResolvedType.Asset;
-                case "int[]": return ResolvedType.IntArray;
-                case "float[]": return ResolvedType.FloatArray;
-                case "string[]": return ResolvedType.StringArray;
-                case "bool[]": return ResolvedType.BoolArray;
-                default:
-                    schema.warnings.Add(new ValidationWarning
-                    {
-                        level = WarningLevel.Warning,
-                        message = $"Unrecognized type hint '{typeHint}', defaulting to String"
-                    });
-                    return ResolvedType.String;
-            }
+                level = WarningLevel.Warning,
+                message = $"Unrecognized type hint '{typeHint}', defaulting to String"
+            });
+            return ResolvedType.String;
         }
 
         private static void ParseFlags(string flagsCell, ColumnSchema column, TableSchema schema)
@@ -183,10 +238,10 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrWhiteSpace(flagsCell))
                 return;
 
-            if (column.resolvedType == ResolvedType.Enum)
+            if (column.Type == ResolvedType.Enum)
             {
                 var enumValues = flagsCell.Split(',').Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToArray();
-                column.enumValues = enumValues;
+                column.EnumValues = enumValues;
                 return;
             }
 
@@ -194,40 +249,47 @@ namespace DataToScriptableObject.Editor
 
             foreach (var flag in flags)
             {
-                string lower = flag.ToLowerInvariant();
+                var lower = flag.ToLowerInvariant();
 
-                if (lower == "key")
-                    column.isKey = true;
-                else if (lower == "name")
-                    column.isName = true;
-                else if (lower == "optional")
-                    column.isOptional = true;
-                else if (lower == "skip")
-                    column.isSkipped = true;
-                else if (lower == "list")
-                    column.isList = true;
-                else if (lower == "hide")
-                    column.attributes["hide"] = "";
-                else if (lower.StartsWith("header(") && lower.EndsWith(")"))
+                switch (lower)
                 {
-                    string value = flag.Substring(7, flag.Length - 8);
-                    column.attributes["header"] = value;
-                }
-                else if (lower.StartsWith("tooltip(") && lower.EndsWith(")"))
-                {
-                    string value = flag.Substring(8, flag.Length - 9);
-                    column.attributes["tooltip"] = value;
-                }
-                else if (lower.StartsWith("range(") && lower.EndsWith(")"))
-                {
-                    string value = flag.Substring(6, flag.Length - 7);
-                    var parts = value.Split(';');
-                    if (parts.Length == 2)
+                    case "key":
+                        column.IsKey = true;
+                        break;
+                    case "name":
+                        column.IsName = true;
+                        break;
+                    case "optional":
+                        column.IsOptional = true;
+                        break;
+                    case "skip":
+                        column.IsSkipped = true;
+                        break;
+                    case "list":
+                        column.IsList = true;
+                        break;
+                    case "hide":
+                        column.Attributes["hide"] = "";
+                        break;
+                    default:
                     {
-                        column.attributes["range"] = $"{parts[0].Trim()},{parts[1].Trim()}";
+                        if (TryParseAttributeFlag(flag, "header", out var headerValue))
+                            column.Attributes["header"] = headerValue;
+                        else if (TryParseAttributeFlag(flag, "tooltip", out var tooltipValue))
+                            column.Attributes["tooltip"] = tooltipValue;
+                        else if (TryParseAttributeFlag(flag, "range", out var rangeValue))
+                        {
+                            var parts = rangeValue.Split(';');
+                            if (parts.Length == 2)
+                                column.Attributes["range"] = $"{parts[0].Trim()},{parts[1].Trim()}";
+                        }
+
+                        break;
                     }
                 }
             }
         }
+        
+        #endregion
     }
 }

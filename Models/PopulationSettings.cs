@@ -3,10 +3,10 @@ namespace DataToScriptableObject
     [System.Serializable]
     public class PopulationSettings
     {
-        public string assetOutputPath;
-        public string assetPrefix;
-        public string assetNamingColumn;
-        public bool overwriteExisting;
-        public bool deleteOrphaned;
+        public string AssetOutputPath { get; set;  }
+        public string AssetPrefix { get; set;  }
+        public string AssetNamingColumn { get; set;  }
+        public bool OverwriteExisting { get; set;  }
+        public bool DeleteOrphaned { get; set;  }
     }
 }

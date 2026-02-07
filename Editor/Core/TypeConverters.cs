@@ -7,6 +7,12 @@ namespace DataToScriptableObject.Editor
 {
     public static class TypeConverters
     {
+        private const float ColorByteMax = 255f;
+        
+#if UNITY_EDITOR
+        private static readonly string[] AssetExtensions = { ".png", ".jpg", ".prefab", ".asset", ".mat", ".fbx" };
+#endif
+
         public static int ToInt(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -72,10 +78,10 @@ namespace DataToScriptableObject.Editor
 
         public static string ToString(string value, string nullToken)
         {
-            if (value == nullToken)
+            if (value == nullToken || value == null)
                 return null;
-
-            return value ?? "";
+            
+            return value;
         }
 
         public static Vector2 ToVector2(string value)
@@ -83,23 +89,17 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrWhiteSpace(value))
                 return Vector2.zero;
 
-            try
+            value = value.Trim().Trim('(', ')');
+            var parts = value.Split(',');
+            
+            if (parts.Length >= 2)
             {
-                value = value.Trim().Trim('(', ')');
-                var parts = value.Split(',');
-                
-                if (parts.Length >= 2)
-                {
-                    float x = ToFloat(parts[0].Trim());
-                    float y = ToFloat(parts[1].Trim());
-                    return new Vector2(x, y);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"Failed to convert '{value}' to Vector2: {ex.Message}. Using default: Vector2.zero");
+                var x = ToFloat(parts[0].Trim());
+                var y = ToFloat(parts[1].Trim());
+                return new Vector2(x, y);
             }
 
+            Debug.LogWarning($"Failed to convert '{value}' to Vector2. Using default: Vector2.zero");
             return Vector2.zero;
         }
 
@@ -108,24 +108,18 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrWhiteSpace(value))
                 return Vector3.zero;
 
-            try
+            value = value.Trim().Trim('(', ')');
+            var parts = value.Split(',');
+            
+            if (parts.Length >= 3)
             {
-                value = value.Trim().Trim('(', ')');
-                var parts = value.Split(',');
-                
-                if (parts.Length >= 3)
-                {
-                    float x = ToFloat(parts[0].Trim());
-                    float y = ToFloat(parts[1].Trim());
-                    float z = ToFloat(parts[2].Trim());
-                    return new Vector3(x, y, z);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"Failed to convert '{value}' to Vector3: {ex.Message}. Using default: Vector3.zero");
+                var x = ToFloat(parts[0].Trim());
+                var y = ToFloat(parts[1].Trim());
+                var z = ToFloat(parts[2].Trim());
+                return new Vector3(x, y, z);
             }
 
+            Debug.LogWarning($"Failed to convert '{value}' to Vector3. Using default: Vector3.zero");
             return Vector3.zero;
         }
 
@@ -134,81 +128,56 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrWhiteSpace(value))
                 return Color.white;
 
-            try
-            {
-                value = value.Trim();
+            value = value.Trim();
 
-                if (value.StartsWith("#"))
+            // Try hex color first
+            if (value.StartsWith("#") && ColorUtility.TryParseHtmlString(value, out Color hexColor))
+                return hexColor;
+
+            // Try RGB/RGBA
+            var parts = value.Split(',');
+            if (parts.Length >= 3)
+            {
+                var r = NormalizeColorComponent(ToFloat(parts[0].Trim()));
+                var g = NormalizeColorComponent(ToFloat(parts[1].Trim()));
+                var b = NormalizeColorComponent(ToFloat(parts[2].Trim()));
+                var a = 1f;
+
+                if (parts.Length >= 4)
                 {
-                    if (ColorUtility.TryParseHtmlString(value, out Color color))
-                        return color;
+                    a = NormalizeColorComponent(ToFloat(parts[3].Trim()));
                 }
 
-                var parts = value.Split(',');
-                if (parts.Length >= 3)
-                {
-                    float r, g, b, a = 1f;
-
-                    float r_val = ToFloat(parts[0].Trim());
-                    float g_val = ToFloat(parts[1].Trim());
-                    float b_val = ToFloat(parts[2].Trim());
-
-                    if (r_val > 1f || g_val > 1f || b_val > 1f)
-                    {
-                        r = r_val / 255f;
-                        g = g_val / 255f;
-                        b = b_val / 255f;
-                    }
-                    else
-                    {
-                        r = r_val;
-                        g = g_val;
-                        b = b_val;
-                    }
-
-                    if (parts.Length >= 4)
-                    {
-                        float a_val = ToFloat(parts[3].Trim());
-                        a = a_val > 1f ? a_val / 255f : a_val;
-                    }
-
-                    return new Color(r, g, b, a);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"Failed to convert '{value}' to Color: {ex.Message}. Using default: Color.white");
+                return new Color(r, g, b, a);
             }
 
+            Debug.LogWarning($"Failed to convert '{value}' to Color. Using default: Color.white");
             return Color.white;
+        }
+
+        private static float NormalizeColorComponent(float value)
+        {
+            return value > 1f ? value / ColorByteMax : value;
         }
 
         public static object ToEnum(string value, Type enumType)
         {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                var values = Enum.GetValues(enumType);
-                return values.Length > 0 ? values.GetValue(0) : null;
-            }
+            if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse(enumType, value, true, out object result))
+                return result;
 
-            try
-            {
-                if (Enum.TryParse(enumType, value, true, out object result))
-                    return result;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"Failed to convert '{value}' to enum {enumType.Name}: {ex.Message}");
-            }
-
-            var fallbackValues = Enum.GetValues(enumType);
-            return fallbackValues.Length > 0 ? fallbackValues.GetValue(0) : null;
+            // Fallback to first enum value
+            var values = Enum.GetValues(enumType);
+            if (values.Length > 0)
+                return values.GetValue(0);
+            
+            Debug.LogWarning($"Enum type {enumType.Name} has no values");
+            return null;
         }
 
         public static T[] ToArray<T>(string value, string delimiter, Func<string, T> elementConverter)
         {
             if (string.IsNullOrWhiteSpace(value))
-                return new T[0];
+                return Array.Empty<T>();
 
             var parts = value.Split(new[] { delimiter }, StringSplitOptions.None);
             var result = new T[parts.Length];
@@ -236,8 +205,7 @@ namespace DataToScriptableObject.Editor
             
             if (asset == null)
             {
-                string[] extensions = { ".png", ".jpg", ".prefab", ".asset", ".mat", ".fbx" };
-                foreach (var ext in extensions)
+                foreach (var ext in AssetExtensions)
                 {
                     asset = UnityEditor.AssetDatabase.LoadAssetAtPath(value + ext, assetType);
                     if (asset != null)

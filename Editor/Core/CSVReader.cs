@@ -9,19 +9,92 @@ namespace DataToScriptableObject.Editor
 {
     public static class CSVReader
     {
+
+        #region Fields
+
+        private static readonly string[] DirectivePrefixes =
+        {
+            "#class:",
+            "#database:",
+            "#namespace:"
+        };
+
+        #endregion
+        
+        #region Helper Methods
+        private static RawTableData EmptyResult(string[] directives = null)
+        {
+            return new RawTableData
+            {
+                Directives = directives ?? Array.Empty<string>(),
+                Headers = Array.Empty<string>(),
+                TypeHints = null,
+                Flags = null,
+                DataRows = Array.Empty<string[]>()
+            };
+        }
+        
+        private static bool IsDirective(string trimmedLine)
+        {
+            foreach (var prefix in DirectivePrefixes)
+                if (trimmedLine.StartsWith(prefix))
+                    return true;
+            
+            return false;
+        }
+        
+        private static bool IsIgnorableLine(string line, string commentPrefix)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return true;
+
+            var trimmed = line.Trim();
+            return trimmed.StartsWith(commentPrefix) || trimmed.StartsWith("//");
+        }
+        
+        private static bool IsDelimiter(string line, int index, string delimiter)
+        {
+            if (index + delimiter.Length > line.Length)
+                return false;
+
+            return string.CompareOrdinal(
+                line, index,
+                delimiter, 0,
+                delimiter.Length) == 0;
+        }
+        
+        private static int CountOccurrences(string line, string delim)
+        {
+            var count = 0;
+            var index = 0;
+
+            while ((index = line.IndexOf(delim, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += delim.Length;
+            }
+
+            return count + 1;
+        }
+        
+        private static string[] NormalizeRow(string[] row, int length)
+        {
+            if (row.Length == length)
+                return row;
+
+            var result = new string[length];
+            Array.Copy(row, result, Math.Min(row.Length, length));
+            return result;
+        }
+        
+        #endregion
+
+        #region Parse Methods
+        
         public static RawTableData Parse(string csvText, string delimiter, string commentPrefix, int headerRowCount)
         {
             if (string.IsNullOrEmpty(csvText))
-            {
-                return new RawTableData
-                {
-                    directives = new string[0],
-                    headers = new string[0],
-                    typeHints = null,
-                    flags = null,
-                    dataRows = new string[0][]
-                };
-            }
+                return EmptyResult();
 
             if (csvText.StartsWith("\uFEFF"))
                 csvText = csvText.Substring(1);
@@ -30,20 +103,18 @@ namespace DataToScriptableObject.Editor
 
             var lines = new List<string>();
             var directives = new List<string>();
-            var reader = new StringReader(csvText);
+            using var reader = new StringReader(csvText);
             string line;
 
             while ((line = reader.ReadLine()) != null)
             {
-                string trimmed = line.Trim();
-                
-                if (trimmed.StartsWith("#class:") || trimmed.StartsWith("#database:") || trimmed.StartsWith("#namespace:"))
+                var trimmed = line.Trim();
+
+                if (IsDirective(trimmed))
                 {
                     directives.Add(line);
                 }
-                else if (!string.IsNullOrWhiteSpace(trimmed) && 
-                         !trimmed.StartsWith(commentPrefix) && 
-                         !trimmed.StartsWith("//"))
+                else if (!IsIgnorableLine(line, commentPrefix))
                 {
                     lines.Add(line);
                     break;
@@ -59,14 +130,11 @@ namespace DataToScriptableObject.Editor
                 delimiter = DetectDelimiter(lines, commentPrefix);
 
             var parsedLines = new List<string[]>();
-            for (int i = 0; i < lines.Count; i++)
+            for (var i = 0; i < lines.Count; i++)
             {
-                string currentLine = lines[i];
-                string trimmed = currentLine.Trim();
+                var currentLine = lines[i];
 
-                if (string.IsNullOrWhiteSpace(trimmed) || 
-                    trimmed.StartsWith(commentPrefix) || 
-                    trimmed.StartsWith("//"))
+                if (IsIgnorableLine(currentLine, commentPrefix))
                     continue;
 
                 var fields = ParseLine(currentLine, delimiter, lines, ref i);
@@ -74,34 +142,28 @@ namespace DataToScriptableObject.Editor
             }
 
             if (parsedLines.Count == 0)
-            {
-                return new RawTableData
-                {
-                    directives = directives.ToArray(),
-                    headers = new string[0],
-                    typeHints = null,
-                    flags = null,
-                    dataRows = new string[0][]
-                };
-            }
+                return EmptyResult(directives.ToArray());
 
             var result = new RawTableData
             {
-                directives = directives.ToArray(),
-                headers = parsedLines[0]
+                Directives = directives.ToArray(),
+                Headers = parsedLines[0]
             };
 
-            int currentRow = 1;
+            var columnCount = result.Headers.Length;
+            var currentRow = 1;
+            
+            result.Headers = NormalizeRow(result.Headers, columnCount);
 
             if (headerRowCount >= 2 && parsedLines.Count > currentRow)
             {
-                result.typeHints = parsedLines[currentRow];
+                result.TypeHints = NormalizeRow(parsedLines[currentRow], columnCount);
                 currentRow++;
             }
 
             if (headerRowCount >= 3 && parsedLines.Count > currentRow)
             {
-                result.flags = parsedLines[currentRow];
+                result.Flags = NormalizeRow(parsedLines[currentRow], columnCount);
                 currentRow++;
             }
 
@@ -109,30 +171,32 @@ namespace DataToScriptableObject.Editor
             for (int i = currentRow; i < parsedLines.Count; i++)
             {
                 var row = parsedLines[i];
-                if (row.Length < result.headers.Length)
+                if (row.Length < result.Headers.Length)
                 {
-                    var padded = new string[result.headers.Length];
+                    var padded = new string[result.Headers.Length];
                     Array.Copy(row, padded, row.Length);
-                    for (int j = row.Length; j < padded.Length; j++)
+                    
+                    for (var j = row.Length; j < padded.Length; j++)
                         padded[j] = "";
+                    
                     row = padded;
                 }
-                else if (row.Length > result.headers.Length)
+                else if (row.Length > result.Headers.Length)
                 {
-                    var truncated = new string[result.headers.Length];
-                    Array.Copy(row, truncated, result.headers.Length);
+                    var truncated = new string[result.Headers.Length];
+                    Array.Copy(row, truncated, result.Headers.Length);
                     row = truncated;
                 }
                 dataRows.Add(row);
             }
 
-            result.dataRows = dataRows.ToArray();
+            result.DataRows = dataRows.ToArray();
             return result;
         }
 
         public static RawTableData ReadFromFile(string filePath, string delimiter, string commentPrefix, int headerRowCount)
         {
-            string csvText = File.ReadAllText(filePath);
+            var csvText = File.ReadAllText(filePath);
             return Parse(csvText, delimiter, commentPrefix, headerRowCount);
         }
 
@@ -152,23 +216,23 @@ namespace DataToScriptableObject.Editor
             var delimitersScores = new Dictionary<string, int>();
             foreach (var delim in candidates)
             {
-                var counts = linesToCheck.Select(l => l.Split(new[] { delim }, StringSplitOptions.None).Length).ToList();
+                var counts = linesToCheck
+                    .Select(l => CountOccurrences(l, delim))
+                    .ToList();
+                
                 if (counts.Count > 0 && counts.All(c => c == counts[0]) && counts[0] > 1)
                     delimitersScores[delim] = counts[0];
             }
 
-            if (delimitersScores.Count == 0)
-                return ",";
-
-            return delimitersScores.OrderByDescending(kvp => kvp.Value).First().Key;
+            return delimitersScores.Count == 0 ? "," : delimitersScores.OrderByDescending(kvp => kvp.Value).First().Key;
         }
 
         private static string[] ParseLine(string line, string delimiter, List<string> allLines, ref int lineIndex)
         {
             var fields = new List<string>();
             var currentField = new StringBuilder();
-            bool inQuotes = false;
-            int i = 0;
+            var inQuotes = false;
+            var i = 0;
 
             while (i < line.Length || inQuotes)
             {
@@ -188,7 +252,7 @@ namespace DataToScriptableObject.Editor
                     }
                 }
 
-                char c = line[i];
+                var c = line[i];
 
                 if (inQuotes)
                 {
@@ -213,8 +277,9 @@ namespace DataToScriptableObject.Editor
                 }
                 else
                 {
-                    if (c == '"' && currentField.Length == 0)
+                    if (c == '"' && currentField.ToString().All(char.IsWhiteSpace))
                     {
+                        currentField.Clear();
                         inQuotes = true;
                         i++;
                     }
@@ -236,13 +301,7 @@ namespace DataToScriptableObject.Editor
 
             return fields.ToArray();
         }
-
-        private static bool IsDelimiter(string line, int index, string delimiter)
-        {
-            if (index + delimiter.Length > line.Length)
-                return false;
-
-            return line.Substring(index, delimiter.Length) == delimiter;
-        }
+        
+        #endregion
     }
 }

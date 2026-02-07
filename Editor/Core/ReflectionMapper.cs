@@ -18,21 +18,21 @@ namespace DataToScriptableObject.Editor
             var mappings = new List<FieldMapping>();
             var mappedFields = new HashSet<string>();
 
-            foreach (var column in schema.columns.Where(c => !c.isSkipped))
+            foreach (var column in schema.Columns.Where(c => !c.IsSkipped))
             {
                 FieldInfo matchedField = null;
 
-                matchedField = allFields.FirstOrDefault(f => f.Name == column.fieldName);
+                matchedField = allFields.FirstOrDefault(f => f.Name == column.FieldName);
 
                 if (matchedField == null)
                 {
                     matchedField = allFields.FirstOrDefault(f => 
-                        string.Equals(f.Name, column.fieldName, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(f.Name, column.FieldName, StringComparison.OrdinalIgnoreCase));
                 }
 
                 if (matchedField == null)
                 {
-                    string normalizedColumn = NormalizeFieldName(column.fieldName);
+                    string normalizedColumn = NormalizeFieldName(column.FieldName);
                     matchedField = allFields.FirstOrDefault(f => 
                         NormalizeFieldName(f.Name) == normalizedColumn);
                 }
@@ -42,24 +42,24 @@ namespace DataToScriptableObject.Editor
                     mappedFields.Add(matchedField.Name);
                     mappings.Add(new FieldMapping
                     {
-                        column = column,
-                        targetField = matchedField,
-                        isAutoMapped = true
+                        Column = column,
+                        TargetField = matchedField,
+                        IsAutoMapped = true
                     });
                 }
                 else
                 {
                     mappings.Add(new FieldMapping
                     {
-                        column = column,
-                        targetField = null,
-                        isAutoMapped = false
+                        Column = column,
+                        TargetField = null,
+                        IsAutoMapped = false
                     });
 
-                    schema.warnings.Add(new ValidationWarning
+                    schema.Warnings.Add(new ValidationWarning
                     {
                         level = WarningLevel.Warning,
-                        message = $"Column '{column.originalHeader}' has no matching field on type '{targetType.Name}'"
+                        message = $"Column '{column.OriginalHeader}' has no matching field on type '{targetType.Name}'"
                     });
                 }
             }
@@ -68,7 +68,7 @@ namespace DataToScriptableObject.Editor
             {
                 if (!mappedFields.Contains(field.Name))
                 {
-                    schema.warnings.Add(new ValidationWarning
+                    schema.Warnings.Add(new ValidationWarning
                     {
                         level = WarningLevel.Info,
                         message = $"Field '{field.Name}' on type '{targetType.Name}' has no matching column and will keep its default value"

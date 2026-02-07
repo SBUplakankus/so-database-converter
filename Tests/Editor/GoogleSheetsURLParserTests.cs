@@ -11,9 +11,9 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://docs.google.com/spreadsheets/d/ABC123/edit#gid=0");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("ABC123", result.spreadsheetId);
-            Assert.AreEqual("0", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("ABC123", result.SpreadsheetId);
+            Assert.AreEqual("0", result.Gid);
         }
 
         [Test]
@@ -21,9 +21,9 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://docs.google.com/spreadsheets/d/ABC123/edit?usp=sharing");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("ABC123", result.spreadsheetId);
-            Assert.AreEqual("0", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("ABC123", result.SpreadsheetId);
+            Assert.AreEqual("0", result.Gid);
         }
 
         [Test]
@@ -31,9 +31,9 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://docs.google.com/spreadsheets/d/ABC123/");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("ABC123", result.spreadsheetId);
-            Assert.AreEqual("0", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("ABC123", result.SpreadsheetId);
+            Assert.AreEqual("0", result.Gid);
         }
 
         [Test]
@@ -41,9 +41,9 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://docs.google.com/spreadsheets/d/ABC123/export?format=csv&gid=12345");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("ABC123", result.spreadsheetId);
-            Assert.AreEqual("12345", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("ABC123", result.SpreadsheetId);
+            Assert.AreEqual("12345", result.Gid);
         }
 
         [Test]
@@ -51,9 +51,9 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("ABC123DEF456GHI789JKL012");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("ABC123DEF456GHI789JKL012", result.spreadsheetId);
-            Assert.AreEqual("0", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("ABC123DEF456GHI789JKL012", result.SpreadsheetId);
+            Assert.AreEqual("0", result.Gid);
         }
 
         [Test]
@@ -61,8 +61,8 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://docs.google.com/spreadsheets/d/ABC123/edit#gid=42");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("42", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("42", result.Gid);
         }
 
         [Test]
@@ -70,8 +70,8 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://docs.google.com/spreadsheets/d/ABC123/edit?gid=42");
             
-            Assert.IsTrue(result.isValid);
-            Assert.AreEqual("42", result.gid);
+            Assert.IsTrue(result.IsValid);
+            Assert.AreEqual("42", result.Gid);
         }
 
         [Test]
@@ -79,8 +79,8 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("https://example.com");
             
-            Assert.IsFalse(result.isValid);
-            Assert.IsNotNull(result.error);
+            Assert.IsFalse(result.IsValid);
+            Assert.IsNotNull(result.Error);
         }
 
         [Test]
@@ -88,8 +88,8 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse("");
             
-            Assert.IsFalse(result.isValid);
-            Assert.AreEqual("URL is empty", result.error);
+            Assert.IsFalse(result.IsValid);
+            Assert.AreEqual("URL is empty", result.Error);
         }
 
         [Test]
@@ -97,8 +97,8 @@ namespace DataToScriptableObject.Tests.Editor
         {
             var result = GoogleSheetsURLParser.Parse(null);
             
-            Assert.IsFalse(result.isValid);
-            Assert.AreEqual("URL is empty", result.error);
+            Assert.IsFalse(result.IsValid);
+            Assert.AreEqual("URL is empty", result.Error);
         }
 
         [Test]
