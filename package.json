@@ -1,0 +1,19 @@
+{
+  "name": "com.data-to-scriptableobject",
+  "version": "0.1.0",
+  "displayName": "Data to ScriptableObject",
+  "description": "Convert CSV files and Google Sheets into typed ScriptableObject assets with automatic code generation.",
+  "unity": "2021.3",
+  "keywords": ["csv", "google-sheets", "scriptableobject", "database", "import", "codegen"],
+  "license": "MIT",
+  "author": {
+    "name": "SBUplakankus"
+  },
+  "samples": [
+    {
+      "displayName": "CSV Examples",
+      "description": "Example CSV files demonstrating the multi-row header convention.",
+      "path": "Samples~/CSV"
+    }
+  ]
+}
