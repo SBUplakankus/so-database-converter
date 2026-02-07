@@ -1,6 +1,7 @@
-using NUnit.Framework;
+using System.Collections.Generic;
 using DataToScriptableObject;
 using DataToScriptableObject.Editor;
+using NUnit.Framework;
 
 namespace DataToScriptableObject.Tests.Editor
 {

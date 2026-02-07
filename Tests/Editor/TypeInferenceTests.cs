@@ -1,6 +1,6 @@
-using NUnit.Framework;
 using DataToScriptableObject;
 using DataToScriptableObject.Editor;
+using NUnit.Framework;
 
 namespace DataToScriptableObject.Tests.Editor
 {

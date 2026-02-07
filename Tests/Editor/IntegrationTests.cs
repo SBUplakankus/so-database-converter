@@ -1,7 +1,7 @@
-using NUnit.Framework;
+using System.Linq;
 using DataToScriptableObject;
 using DataToScriptableObject.Editor;
-using System.Linq;
+using NUnit.Framework;
 
 namespace DataToScriptableObject.Tests.Editor
 {

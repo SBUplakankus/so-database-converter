@@ -1,5 +1,5 @@
-using DataToScriptableObject;
 using System.Text.RegularExpressions;
+using DataToScriptableObject;
 
 namespace DataToScriptableObject.Editor
 {

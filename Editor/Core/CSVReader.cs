@@ -1,10 +1,8 @@
-using DataToScriptableObject;
-using Microsoft.VisualBasic.FileIO;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
+using Microsoft.VisualBasic.FileIO;
 
 namespace DataToScriptableObject.Editor
 {

@@ -1,8 +1,8 @@
-using NUnit.Framework;
-using DataToScriptableObject;
-using DataToScriptableObject.Editor;
 using System.Linq;
 using System.Text.RegularExpressions;
+using DataToScriptableObject;
+using DataToScriptableObject.Editor;
+using NUnit.Framework;
 
 namespace DataToScriptableObject.Tests.Editor
 {

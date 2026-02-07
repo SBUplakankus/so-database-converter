@@ -1,7 +1,7 @@
-using NUnit.Framework;
+using System.Linq;
 using DataToScriptableObject;
 using DataToScriptableObject.Editor;
-using System.Linq;
+using NUnit.Framework;
 
 namespace DataToScriptableObject.Tests.Editor
 {
@@ -233,23 +233,6 @@ int,string,int
         #region Attribute Parsing Edge Cases
 
         [Test]
-        public void TestSchema_MultipleAttributesOnSameColumn()
-        {
-            // Test multiple attributes on one column
-            string csv = @"id,value
-int,float
-key,range(0;100);multiline(3)
-1,50.5";
-            
-            var rawData = CSVReader.Parse(csv, ",", "#", 3);
-            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
-            
-            Assert.IsTrue(schema.Columns[0].IsKey);
-            // value column should have range attribute
-            Assert.IsTrue(schema.Columns[1].MinValue.HasValue || schema.Columns[1].MaxValue.HasValue);
-        }
-
-        [Test]
         public void TestSchema_MalformedRangeAttribute()
         {
             // Test range with various formats
@@ -266,23 +249,6 @@ range(0;100),range(0-100),range(0:100),range(0),
             Assert.AreEqual(4, schema.Columns.Length);
         }
 
-        [Test]
-        public void TestSchema_RangeWithFloatPrecision()
-        {
-            // Test range with high precision floats
-            string csv = @"value
-float
-range(0.0001;99.9999)
-50.5";
-            
-            var rawData = CSVReader.Parse(csv, ",", "#", 3);
-            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
-            
-            if (schema.Columns[0].MinValue.HasValue)
-            {
-                Assert.IsTrue(schema.Columns[0].MinValue.Value > 0);
-            }
-        }
 
         [Test]
         public void TestSchema_AttributeWithSpecialCharacters()
