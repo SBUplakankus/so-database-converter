@@ -167,5 +167,417 @@ namespace DataToScriptableObject.Tests.Editor
             Assert.AreEqual(ResolvedType.String, schema.Columns[1].Type);
             Assert.IsTrue(schema.Warnings.Any(w => w.message.Contains("Unrecognized") || w.message.Contains("vectr3")));
         }
+
+        // ==================== DIAGNOSTIC TESTS ====================
+        // These tests help diagnose the root causes of failures
+
+        #region Header and Column Diagnostics
+
+        [Test]
+        public void TestOriginalHeaderPreserved()
+        {
+            // Diagnostic: OriginalHeader should match input
+            string csv = "MyColumn\n1";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(1, schema.Columns.Length);
+            Assert.AreEqual("MyColumn", schema.Columns[0].OriginalHeader);
+        }
+
+        [Test]
+        public void TestFieldNameSanitization()
+        {
+            // FieldName should be sanitized version of header
+            string csv = "My Column\n1";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual("My Column", schema.Columns[0].OriginalHeader);
+            Assert.AreEqual("myColumn", schema.Columns[0].FieldName);
+        }
+
+        [Test]
+        public void TestEmptyHeaderAtMiddle()
+        {
+            // Empty header in middle position
+            string csv = "first,,third\n1,2,3";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(3, schema.Columns.Length);
+            Assert.AreEqual("column_1", schema.Columns[1].OriginalHeader);
+        }
+
+        [Test]
+        public void TestMultipleDuplicateHeaders()
+        {
+            // Multiple same headers
+            string csv = "name,name,name\n1,2,3";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(3, schema.Columns.Length);
+            Assert.AreEqual("name", schema.Columns[0].OriginalHeader);
+            Assert.AreEqual("name_2", schema.Columns[1].OriginalHeader);
+            Assert.AreEqual("name_3", schema.Columns[2].OriginalHeader);
+        }
+
+        [Test]
+        public void TestAllEmptyHeaders()
+        {
+            string csv = ",,\n1,2,3";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(3, schema.Columns.Length);
+            Assert.AreEqual("column_0", schema.Columns[0].OriginalHeader);
+            Assert.AreEqual("column_1", schema.Columns[1].OriginalHeader);
+            Assert.AreEqual("column_2", schema.Columns[2].OriginalHeader);
+        }
+
+        #endregion
+
+        #region Type Inference Diagnostics
+
+        [Test]
+        public void TestSingleRowHeaderInfersFromData()
+        {
+            // With 1-row header, types should be inferred from data
+            string csv = "a,b,c\n1,text,3.5";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.Int, schema.Columns[0].Type);
+            Assert.AreEqual(ResolvedType.String, schema.Columns[1].Type);
+            Assert.AreEqual(ResolvedType.Float, schema.Columns[2].Type);
+        }
+
+        [Test]
+        public void TestExplicitTypeHints()
+        {
+            // Type hints should override inference
+            string csv = "a,b\nstring,float\ntext,42";
+            var rawData = CSVReader.Parse(csv, ",", "#", 2);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.String, schema.Columns[0].Type);
+            Assert.AreEqual(ResolvedType.Float, schema.Columns[1].Type);
+        }
+
+        [Test]
+        public void TestAllTypeHints()
+        {
+            // Test all recognized type hints
+            string csv = "a,b,c,d,e,f,g,h,i\nint,float,double,long,bool,string,vector2,vector3,color\n1,1.5,2.5,100,true,text,(1,2),(1,2,3),#FF0000";
+            var rawData = CSVReader.Parse(csv, ",", "#", 2);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.Int, schema.Columns[0].Type);
+            Assert.AreEqual(ResolvedType.Float, schema.Columns[1].Type);
+            Assert.AreEqual(ResolvedType.Double, schema.Columns[2].Type);
+            Assert.AreEqual(ResolvedType.Long, schema.Columns[3].Type);
+            Assert.AreEqual(ResolvedType.Bool, schema.Columns[4].Type);
+            Assert.AreEqual(ResolvedType.String, schema.Columns[5].Type);
+            Assert.AreEqual(ResolvedType.Vector2, schema.Columns[6].Type);
+            Assert.AreEqual(ResolvedType.Vector3, schema.Columns[7].Type);
+            Assert.AreEqual(ResolvedType.Color, schema.Columns[8].Type);
+        }
+
+        [Test]
+        public void TestArrayTypeHints()
+        {
+            string csv = "a,b,c,d\nint[],float[],string[],bool[]\n1;2;3,1.0;2.0,a;b;c,true;false";
+            var rawData = CSVReader.Parse(csv, ",", "#", 2);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.IntArray, schema.Columns[0].Type);
+            Assert.AreEqual(ResolvedType.FloatArray, schema.Columns[1].Type);
+            Assert.AreEqual(ResolvedType.StringArray, schema.Columns[2].Type);
+            Assert.AreEqual(ResolvedType.BoolArray, schema.Columns[3].Type);
+        }
+
+        #endregion
+
+        #region Enum Parsing Diagnostics
+
+        [Test]
+        public void TestEnumParsingMinimal()
+        {
+            // Minimal enum test
+            string csv = "type\nenum\nA\nA";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.Enum, schema.Columns[0].Type);
+            Assert.IsNotNull(schema.Columns[0].EnumValues);
+            Assert.GreaterOrEqual(schema.Columns[0].EnumValues.Length, 1);
+        }
+
+        [Test]
+        public void TestEnumWithMultipleColumns()
+        {
+            // Multiple enum columns
+            string csv = "element,rarity\nenum,enum\nFire,Water,Common,Rare,Epic\nFire,Common";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.Enum, schema.Columns[0].Type);
+            Assert.AreEqual(ResolvedType.Enum, schema.Columns[1].Type);
+        }
+
+        [Test]
+        public void TestEnumValuesInFlagsRow()
+        {
+            // Verify enum values come from flags row, not data
+            string csv = "id,status\nint,enum\n,Active,Inactive,Pending\n1,Active";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(ResolvedType.Enum, schema.Columns[1].Type);
+            Assert.IsNotNull(schema.Columns[1].EnumValues);
+        }
+
+        #endregion
+
+        #region Flag Parsing Diagnostics
+
+        [Test]
+        public void TestOptionalFlag()
+        {
+            string csv = "id,notes\nint,string\n,optional\n1,";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.IsTrue(schema.Columns[1].IsOptional);
+        }
+
+        [Test]
+        public void TestListFlag()
+        {
+            string csv = "id,tags\nint,string\n,list\n1,a;b;c";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.IsTrue(schema.Columns[1].IsList);
+        }
+
+        [Test]
+        public void TestHideFlag()
+        {
+            string csv = "id,internal\nint,string\n,hide\n1,secret";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.IsTrue(schema.Columns[1].Attributes.ContainsKey("hide"));
+        }
+
+        [Test]
+        public void TestMultipleFlags()
+        {
+            string csv = "id,field\nint,string\nkey,optional|list\n1,a;b";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.IsTrue(schema.Columns[0].IsKey);
+            Assert.IsTrue(schema.Columns[1].IsOptional);
+            Assert.IsTrue(schema.Columns[1].IsList);
+        }
+
+        [Test]
+        public void TestHeaderAttribute()
+        {
+            string csv = "id,damage\nint,float\n,header(Combat Stats)\n1,50";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.IsTrue(schema.Columns[1].Attributes.ContainsKey("header"));
+            Assert.AreEqual("Combat Stats", schema.Columns[1].Attributes["header"]);
+        }
+
+        [Test]
+        public void TestCombinedAttributes()
+        {
+            string csv = "id,damage\nint,float\n,range(0;100)|tooltip(Base damage)\n1,50";
+            var rawData = CSVReader.Parse(csv, ",", "#", 3);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.IsTrue(schema.Columns[1].Attributes.ContainsKey("range"));
+            Assert.IsTrue(schema.Columns[1].Attributes.ContainsKey("tooltip"));
+        }
+
+        #endregion
+
+        #region Directive Diagnostics
+
+        [Test]
+        public void TestClassDirective()
+        {
+            string csv = "#class:Weapon\nname\nSword";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual("Weapon", schema.ClassName);
+        }
+
+        [Test]
+        public void TestDatabaseDirective()
+        {
+            string csv = "#database:WeaponDB\nname\nSword";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual("WeaponDB", schema.DatabaseName);
+        }
+
+        [Test]
+        public void TestNamespaceDirective()
+        {
+            string csv = "#namespace:Game.Items\nname\nSword";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual("Game.Items", schema.NamespaceName);
+        }
+
+        [Test]
+        public void TestAllDirectives()
+        {
+            string csv = "#class:Item\n#database:ItemDB\n#namespace:Game\nname\nSword";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual("Item", schema.ClassName);
+            Assert.AreEqual("ItemDB", schema.DatabaseName);
+            Assert.AreEqual("Game", schema.NamespaceName);
+        }
+
+        [Test]
+        public void TestSettingsDefaultWhenNoDirective()
+        {
+            string csv = "name\nSword";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var settings = GetDefaultSettings();
+            settings.ClassName = "DefaultClass";
+            settings.DatabaseName = "DefaultDB";
+            var schema = SchemaBuilder.Build(rawData, settings);
+            
+            Assert.AreEqual("DefaultClass", schema.ClassName);
+            Assert.AreEqual("DefaultDB", schema.DatabaseName);
+        }
+
+        [Test]
+        public void TestDirectiveWithWhitespace()
+        {
+            string csv = "#class: SpacedClass \nname\nSword";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            // Should trim whitespace
+            Assert.AreEqual("SpacedClass", schema.ClassName);
+        }
+
+        #endregion
+
+        #region Edge Cases
+
+        [Test]
+        public void TestNoColumns()
+        {
+            string csv = "";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(0, schema.Columns.Length);
+        }
+
+        [Test]
+        public void TestSingleColumn()
+        {
+            string csv = "id\n1\n2\n3";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(1, schema.Columns.Length);
+            Assert.AreEqual(ResolvedType.Int, schema.Columns[0].Type);
+        }
+
+        [Test]
+        public void TestRowsBuiltCorrectly()
+        {
+            string csv = "id,name\n1,Item1\n2,Item2";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(2, schema.Rows.Count);
+            Assert.AreEqual("1", schema.Rows[0]["id"]);
+            Assert.AreEqual("Item1", schema.Rows[0]["name"]);
+            Assert.AreEqual("2", schema.Rows[1]["id"]);
+            Assert.AreEqual("Item2", schema.Rows[1]["name"]);
+        }
+
+        [Test]
+        public void TestEmptyDataRows()
+        {
+            string csv = "id,name";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(2, schema.Columns.Length);
+            Assert.AreEqual(0, schema.Rows.Count);
+        }
+
+        [Test]
+        public void TestSpecialCharactersInHeaders()
+        {
+            string csv = "player-id,item_name,Max HP\n1,Sword,100";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            Assert.AreEqual(3, schema.Columns.Length);
+            // Field names should be sanitized
+            Assert.AreEqual("playerId", schema.Columns[0].FieldName);
+            Assert.AreEqual("itemName", schema.Columns[1].FieldName);
+            Assert.AreEqual("maxHp", schema.Columns[2].FieldName);
+        }
+
+        [Test]
+        public void TestReservedWordHeader()
+        {
+            string csv = "class,namespace,int\nSword,Game,100";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            // Reserved words should be escaped
+            Assert.AreEqual("class_", schema.Columns[0].FieldName);
+            Assert.AreEqual("namespace_", schema.Columns[1].FieldName);
+            Assert.AreEqual("int_", schema.Columns[2].FieldName);
+        }
+
+        [Test]
+        public void TestSanitizationDisabled()
+        {
+            string csv = "My Column\n1";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var settings = GetDefaultSettings();
+            settings.SanitizeFieldNames = false;
+            var schema = SchemaBuilder.Build(rawData, settings);
+            
+            Assert.AreEqual("My Column", schema.Columns[0].FieldName);
+        }
+
+        [Test]
+        public void TestWarningsForIssues()
+        {
+            // Multiple issues should generate warnings
+            string csv = ",a,a\n1,2,3";
+            var rawData = CSVReader.Parse(csv, ",", "#", 1);
+            var schema = SchemaBuilder.Build(rawData, GetDefaultSettings());
+            
+            // Should have warnings for empty header and duplicate
+            Assert.GreaterOrEqual(schema.Warnings.Count, 2);
+        }
+
+        #endregion
     }
 }
