@@ -1,4 +1,5 @@
 using DataToScriptableObject;
+using Microsoft.VisualBasic.FileIO;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -43,45 +44,6 @@ namespace DataToScriptableObject.Editor
             return false;
         }
         
-        private static bool IsIgnorableLine(string line, string commentPrefix)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                return true;
-
-            var trimmed = line.Trim();
-            
-            // Directives are not ignorable - they must be processed
-            if (IsDirective(trimmed))
-                return false;
-            
-            return trimmed.StartsWith(commentPrefix) || trimmed.StartsWith("//");
-        }
-        
-        private static bool IsDelimiter(string line, int index, string delimiter)
-        {
-            if (index + delimiter.Length > line.Length)
-                return false;
-
-            return string.CompareOrdinal(
-                line, index,
-                delimiter, 0,
-                delimiter.Length) == 0;
-        }
-        
-        private static int CountOccurrences(string line, string delim)
-        {
-            var count = 0;
-            var index = 0;
-
-            while ((index = line.IndexOf(delim, index, StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                index += delim.Length;
-            }
-
-            return count + 1;
-        }
-        
         private static string[] NormalizeRow(string[] row, int length)
         {
             if (row.Length == length)
@@ -101,49 +63,91 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrEmpty(csvText))
                 return EmptyResult();
 
+            // Remove BOM if present
             if (csvText.StartsWith("\uFEFF"))
                 csvText = csvText.Substring(1);
 
+            // Normalize line endings
             csvText = csvText.Replace("\r\n", "\n").Replace("\r", "\n");
 
-            var lines = new List<string>();
+            // Extract directives from the prelude (before any data)
             var directives = new List<string>();
-            using var reader = new StringReader(csvText);
-            string line;
-
-            while ((line = reader.ReadLine()) != null)
+            var csvDataStart = 0;
+            
+            using (var reader = new StringReader(csvText))
             {
-                var trimmed = line.Trim();
-
-                if (IsDirective(trimmed))
+                string line;
+                var inPrelude = true;
+                
+                while ((line = reader.ReadLine()) != null)
                 {
-                    directives.Add(line);
-                }
-                else if (!IsIgnorableLine(line, commentPrefix))
-                {
-                    lines.Add(line);
-                    break;
+                    var trimmed = line.Trim();
+                    
+                    if (inPrelude)
+                    {
+                        if (IsDirective(trimmed))
+                        {
+                            directives.Add(line);
+                            csvDataStart += line.Length + 1; // +1 for newline
+                        }
+                        else if (string.IsNullOrWhiteSpace(trimmed) || 
+                                trimmed.StartsWith(commentPrefix) || 
+                                trimmed.StartsWith("//"))
+                        {
+                            csvDataStart += line.Length + 1;
+                        }
+                        else
+                        {
+                            // First non-directive, non-comment, non-empty line = end of prelude
+                            inPrelude = false;
+                            break;
+                        }
+                    }
                 }
             }
 
-            while ((line = reader.ReadLine()) != null)
-            {
-                lines.Add(line);
-            }
-
+            // Extract the CSV data portion (after directives)
+            var csvData = csvDataStart < csvText.Length ? csvText.Substring(csvDataStart) : csvText;
+            
+            // Auto-detect delimiter if needed
             if (delimiter == "auto")
-                delimiter = DetectDelimiter(lines, commentPrefix);
-
+                delimiter = DetectDelimiterFromText(csvData, commentPrefix);
+            
+            // Convert delimiter to TextFieldParser format
+            var delimiterChar = ConvertDelimiter(delimiter);
+            
+            // Parse CSV using TextFieldParser
             var parsedLines = new List<string[]>();
-            for (var i = 0; i < lines.Count; i++)
+            
+            using (var reader = new StringReader(csvData))
+            using (var parser = new TextFieldParser(reader))
             {
-                var currentLine = lines[i];
+                parser.TextFieldType = FieldType.Delimited;
+                parser.SetDelimiters(delimiterChar);
+                parser.HasFieldsEnclosedInQuotes = true;
+                parser.TrimWhiteSpace = false;
+                
+                // Set comment tokens
+                var commentTokens = new List<string>();
+                if (!string.IsNullOrEmpty(commentPrefix))
+                    commentTokens.Add(commentPrefix);
+                commentTokens.Add("//");
+                parser.CommentTokens = commentTokens.ToArray();
 
-                if (IsIgnorableLine(currentLine, commentPrefix))
-                    continue;
-
-                var fields = ParseLine(currentLine, delimiter, lines, ref i);
-                parsedLines.Add(fields);
+                while (!parser.EndOfData)
+                {
+                    try
+                    {
+                        string[] fields = parser.ReadFields();
+                        if (fields != null)
+                            parsedLines.Add(fields);
+                    }
+                    catch (MalformedLineException)
+                    {
+                        // Skip malformed lines
+                        continue;
+                    }
+                }
             }
 
             if (parsedLines.Count == 0)
@@ -206,106 +210,62 @@ namespace DataToScriptableObject.Editor
             return Parse(csvText, delimiter, commentPrefix, headerRowCount);
         }
 
-        private static string DetectDelimiter(List<string> lines, string commentPrefix)
+        private static string DetectDelimiterFromText(string csvData, string commentPrefix)
         {
             var candidates = new[] { ",", ";", "\t" };
-            var linesToCheck = lines
-                .Where(l => !string.IsNullOrWhiteSpace(l) && 
-                           !l.Trim().StartsWith(commentPrefix) && 
-                           !l.Trim().StartsWith("//"))
-                .Take(5)
-                .ToList();
+            var lines = new List<string>();
+            
+            using (var reader = new StringReader(csvData))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null && lines.Count < 5)
+                {
+                    var trimmed = line.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed) && 
+                        !trimmed.StartsWith(commentPrefix) && 
+                        !trimmed.StartsWith("//"))
+                    {
+                        lines.Add(line);
+                    }
+                }
+            }
 
-            if (linesToCheck.Count == 0)
+            if (lines.Count == 0)
                 return ",";
 
-            var delimitersScores = new Dictionary<string, int>();
+            var delimiterScores = new Dictionary<string, int>();
             foreach (var delim in candidates)
             {
-                var counts = linesToCheck
+                var counts = lines
                     .Select(l => CountOccurrences(l, delim))
                     .ToList();
                 
                 if (counts.Count > 0 && counts.All(c => c == counts[0]) && counts[0] > 1)
-                    delimitersScores[delim] = counts[0];
+                    delimiterScores[delim] = counts[0];
             }
 
-            return delimitersScores.Count == 0 ? "," : delimitersScores.OrderByDescending(kvp => kvp.Value).First().Key;
+            return delimiterScores.Count == 0 ? "," : delimiterScores.OrderByDescending(kvp => kvp.Value).First().Key;
         }
 
-        private static string[] ParseLine(string line, string delimiter, List<string> allLines, ref int lineIndex)
+        private static string ConvertDelimiter(string delimiter)
         {
-            var fields = new List<string>();
-            var currentField = new StringBuilder();
-            var inQuotes = false;
-            var i = 0;
+            // TextFieldParser expects a string array of delimiters
+            // but we return a single delimiter string for SetDelimiters()
+            return delimiter;
+        }
 
-            while (i < line.Length || inQuotes)
+        private static int CountOccurrences(string line, string delim)
+        {
+            var count = 0;
+            var index = 0;
+
+            while ((index = line.IndexOf(delim, index, StringComparison.Ordinal)) >= 0)
             {
-                if (i >= line.Length && inQuotes)
-                {
-                    currentField.Append('\n');
-                    lineIndex++;
-                    if (lineIndex < allLines.Count)
-                    {
-                        line = allLines[lineIndex];
-                        i = 0;
-                        continue;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                var c = line[i];
-
-                if (inQuotes)
-                {
-                    if (c == '"')
-                    {
-                        if (i + 1 < line.Length && line[i + 1] == '"')
-                        {
-                            currentField.Append('"');
-                            i += 2;
-                        }
-                        else
-                        {
-                            inQuotes = false;
-                            i++;
-                        }
-                    }
-                    else
-                    {
-                        currentField.Append(c);
-                        i++;
-                    }
-                }
-                else
-                {
-                    if (c == '"' && currentField.ToString().All(char.IsWhiteSpace))
-                    {
-                        currentField.Clear();
-                        inQuotes = true;
-                        i++;
-                    }
-                    else if (IsDelimiter(line, i, delimiter))
-                    {
-                        fields.Add(currentField.ToString());
-                        currentField.Clear();
-                        i += delimiter.Length;
-                    }
-                    else
-                    {
-                        currentField.Append(c);
-                        i++;
-                    }
-                }
+                count++;
+                index += delim.Length;
             }
 
-            fields.Add(currentField.ToString());
-
-            return fields.ToArray();
+            return count + 1;
         }
         
         #endregion
