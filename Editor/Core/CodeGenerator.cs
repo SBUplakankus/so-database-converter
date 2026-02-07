@@ -56,6 +56,25 @@ namespace DataToScriptableObject.Editor
                 .WithHeader(settings)
                 .BeginNamespace();
             
+            // Generate enum declarations for any enum columns
+            foreach (var column in schema.Columns.Where(c => !c.IsSkipped && c.Type == ResolvedType.Enum))
+            {
+                var enumName = ToPascalCase(column.FieldName);
+                if (column.EnumValues != null && column.EnumValues.Length > 0)
+                {
+                    builder.AppendLine($"public enum {enumName}");
+                    builder.AppendLine("{");
+                    for (int i = 0; i < column.EnumValues.Length; i++)
+                    {
+                        var enumValue = NameSanitizer.SanitizeClassName(column.EnumValues[i]);
+                        var suffix = i < column.EnumValues.Length - 1 ? "," : "";
+                        builder.AppendLine($"    {enumValue}{suffix}");
+                    }
+                    builder.AppendLine("}");
+                    builder.AppendLine();
+                }
+            }
+            
             if(settings.SerializableClassMode)
                 builder.BeginSerializableClass(sanitizedClassName);
             else 

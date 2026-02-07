@@ -120,7 +120,7 @@ namespace DataToScriptableObject.Editor
         {
             var column = new ColumnSchema
             {
-                OriginalHeader = rawData.Headers[columnIndex],
+                OriginalHeader = header,
                 FieldName = settings.SanitizeFieldNames 
                     ? NameSanitizer.SanitizeFieldName(header) 
                     : header,
@@ -141,7 +141,7 @@ namespace DataToScriptableObject.Editor
 
             if (rawData.Flags != null && columnIndex < rawData.Flags.Length)
             {
-                ParseFlags(rawData.Flags[columnIndex], column, schema);
+                ParseFlags(rawData.Flags, columnIndex, column, schema);
             }
 
             return column;
@@ -233,14 +233,21 @@ namespace DataToScriptableObject.Editor
             return ResolvedType.String;
         }
 
-        private static void ParseFlags(string flagsCell, ColumnSchema column, TableSchema schema)
+        private static void ParseFlags(string[] flagsRow, int columnIndex, ColumnSchema column, TableSchema schema)
         {
+            var flagsCell = flagsRow[columnIndex];
+            
             if (string.IsNullOrWhiteSpace(flagsCell))
                 return;
 
             if (column.Type == ResolvedType.Enum)
             {
-                var enumValues = flagsCell.Split(',').Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToArray();
+                // For enums, collect all non-empty values from this column onwards in the flags row
+                var enumValues = flagsRow
+                    .Skip(columnIndex)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToArray();
                 column.EnumValues = enumValues;
                 return;
             }
