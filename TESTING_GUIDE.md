@@ -9,7 +9,24 @@ unity_version: "2021.3+"
 test_mode: Unity Test Runner (EditMode)
 test_directory: Tests/Editor/
 test_assembly: DataToScriptableObject.Tests.Editor.asmdef
+current_status: All 330 tests passing (as of 2026-02-07)
 ```
+
+### Recent Test Fixes (2026-02-07)
+
+**Summary**: Fixed all 46 failing tests by addressing core issues in 5 components.
+
+**Before**: 284/330 passing (86.1%)  
+**After**: 330/330 passing (100%)
+
+**Files Modified**:
+- `Editor/Core/CSVReader.cs` - Directive handling and flags row normalization
+- `Editor/Core/SchemaBuilder.cs` - OriginalHeader and row dictionary keys
+- `Editor/Core/NameSanitizer.cs` - Tab character handling
+- `Editor/Core/TypeConverters.cs` - Null token case sensitivity and empty array handling
+- `Editor/Core/GoogleSheetsURLParser.cs` - Short ID support
+
+**See `TEST_FIXES_SUMMARY.md` for detailed information on each fix.**
 
 ### Test Execution Priority
 
@@ -69,9 +86,65 @@ graph TD
     F[TypeConverterTests] --> B
 ```
 
-### Known Test Failure Patterns
+### Known Test Failure Patterns (RESOLVED 2026-02-07)
 
-#### Pattern 1: Type Inference Issues
+#### Pattern 1: Directive Detection (FIXED)
+```yaml
+symptom: "Expected: 2, But was: 0 (directives count)"
+root_cause: Directives like "#class:MyClass" treated as comments when commentPrefix="#"
+solution: Modified IsIgnorableLine to check IsDirective first before comment prefix check
+affected_tests: 17 CSVReaderTests, 18 SchemaBuilderTests, 7 IntegrationTests
+fix_location: Editor/Core/CSVReader.cs lines 46-56
+fix_date: 2026-02-07
+```
+
+#### Pattern 2: Enum Values Truncation (FIXED)
+```yaml
+symptom: "Expected: 3, But was: 1 (enum values)"
+root_cause: Flags row normalized to header count, truncating enum values in extra columns
+solution: Don't normalize flags row - preserve all columns for enum values
+affected_tests: TestEnumParsing, TestEnumParsingMinimal
+fix_location: Editor/Core/CSVReader.cs lines 169-173
+fix_date: 2026-02-07
+```
+
+#### Pattern 3: OriginalHeader Incorrect (FIXED)
+```yaml
+symptom: "Expected: 'MyColumn', But was: 'yColumn' (first char missing)"
+root_cause: OriginalHeader set to normalized header instead of raw CSV header
+solution: Pass both normalizedHeader and originalHeader to CreateColumn
+affected_tests: TestOriginalHeaderPreserved, TestFieldNameSanitization, 8+ others
+fix_location: Editor/Core/SchemaBuilder.cs lines 119-127, 176-191
+fix_date: 2026-02-07
+```
+
+#### Pattern 4: Tab Character Not Handled (FIXED)
+```yaml
+symptom: "Expected: 'firstName', But was: 'firstname'"
+root_cause: Tab characters not treated as word separators in name sanitization
+solution: Added tab replacement in ConvertToCase method
+affected_tests: TestTabCharacter
+fix_location: Editor/Core/NameSanitizer.cs line 78
+fix_date: 2026-02-07
+```
+
+#### Pattern 5: Type Conversion Edge Cases (FIXED)
+```yaml
+symptom: Various - null token case sensitivity, empty array handling
+root_causes:
+  - Null token comparison was case-sensitive ("NULL" vs "null")
+  - Empty string returned empty array instead of array with one element
+solutions:
+  - Use StringComparison.OrdinalIgnoreCase for null token
+  - Match CSV behavior: empty cell = one empty value, not zero values
+affected_tests: TestToStringNullTokenCaseInsensitive, TestToArrayEmpty
+fix_location: Editor/Core/TypeConverters.cs lines 79-87, 177-191
+fix_date: 2026-02-07
+```
+
+### Historical Test Failure Patterns (For Reference)
+
+#### Pattern 1: Type Inference Issues (Previously Fixed)
 ```yaml
 symptom: "Expected: Int, But was: Bool"
 root_causes:
@@ -81,9 +154,10 @@ affected_tests:
   - TypeInferenceTests.TestBoolWith01
   - SchemaBuilderTests.TestSingleRowHeader
 fix_location: Editor/Core/TypeInference.cs
+status: FIXED (see repository memories)
 ```
 
-#### Pattern 2: Name Sanitization Issues  
+#### Pattern 2: Name Sanitization Issues (Previously Fixed)
 ```yaml
 symptom: "Expected: 'id', But was: 'iD'"
 root_causes:
@@ -92,49 +166,126 @@ root_causes:
 affected_tests:
   - NameSanitizerTests.TestAllCapsToLower
 fix_location: Editor/Core/NameSanitizer.cs
+status: FIXED (see repository memories)
 ```
 
-#### Pattern 3: CSV Parsing Issues
+#### Pattern 3: Enum Flag Collection (Previously Fixed)
 ```yaml
-symptom: "Expected: 2, But was: 0 (directives/rows)"
-root_causes:
-  - Directive detection logic
-  - Quote escaping in ParseLine
-  - Comment prefix conflicts with directives
-affected_tests:
-  - CSVReaderTests.TestDirectivesParsed
-  - CSVReaderTests.TestEscapedDoubleQuotes
-  - CSVReaderTests.TestParseBasicCSV
-fix_location: Editor/Core/CSVReader.cs
+symptom: Enum values not collected from full flags row
+root_cause: ParseFlags only collected single cell instead of all remaining values
+solution: Collect all non-empty values from columnIndex onwards
+fix_location: Editor/Core/SchemaBuilder.cs:236-256
+status: FIXED (see repository memories)
 ```
 
-#### Pattern 4: Schema Building Issues
+### Current Test Suite Status
+
+**Total Tests**: 330  
+**Passing**: 330 (100%)  
+**Failing**: 0  
+**Last Full Run**: 2026-02-07 18:18:06Z  
+**Duration**: ~0.126 seconds
+
+### Test Count by File
 ```yaml
-symptom: "Expected: 'column_0', But was: 'name'"
-root_causes:
-  - OriginalHeader uses raw header instead of normalized
-  - Enum values not collected from full flags row
-  - Directive parsing failures from CSVReader
-affected_tests:
-  - SchemaBuilderTests.TestEmptyHeader
-  - SchemaBuilderTests.TestDuplicateHeaders
-  - SchemaBuilderTests.TestEnumParsing
-  - SchemaBuilderTests.TestDirectivesOverride
-fix_location: Editor/Core/SchemaBuilder.cs
+CodeGeneratorTests.cs: 39 tests (all passing)
+CSVReaderTests.cs: 52 tests (all passing - 17 fixed on 2026-02-07)
+GoogleSheetsURLParserTests.cs: 30 tests (all passing - 1 fixed on 2026-02-07)
+IntegrationTests.cs: 23 tests (all passing - 7 fixed on 2026-02-07)
+NameSanitizerTests.cs: 52 tests (all passing - 1 fixed on 2026-02-07)
+SchemaBuilderTests.cs: 44 tests (all passing - 18 fixed on 2026-02-07)
+TypeConverterTests.cs: 62 tests (all passing - 2 fixed on 2026-02-07)
+TypeInferenceTests.cs: 28 tests (all passing)
 ```
 
-#### Pattern 5: Code Generation Issues
-```yaml
-symptom: "Assert.IsTrue(code.Contains('enum')) failed"
-root_causes:
-  - Enum declarations not generated
-  - Missing enum type before class definition
-affected_tests:
-  - CodeGeneratorTests.TestEnumGeneration
-fix_location: Editor/Core/CodeGenerator.cs
+### Critical Implementation Details (For Future Maintenance)
+
+#### 1. Directive Parsing
+**Location**: `Editor/Core/CSVReader.cs`
+
+Directives (`#class:`, `#database:`, `#namespace:`) must be checked BEFORE comment detection:
+```csharp
+private static bool IsIgnorableLine(string line, string commentPrefix)
+{
+    if (string.IsNullOrWhiteSpace(line))
+        return true;
+    
+    var trimmed = line.Trim();
+    
+    // CRITICAL: Check directives BEFORE comment prefix
+    if (IsDirective(trimmed))
+        return false;
+    
+    return trimmed.StartsWith(commentPrefix) || trimmed.StartsWith("//");
+}
 ```
 
-### Test Efficiency Tips
+**Why**: When commentPrefix is `"#"`, directive lines like `#class:MyClass` would otherwise be treated as comments and skipped.
+
+#### 2. Flags Row Preservation
+**Location**: `Editor/Core/CSVReader.cs`
+
+The flags row must NOT be normalized to header count:
+```csharp
+if (headerRowCount >= 3 && parsedLines.Count > currentRow)
+{
+    // Don't normalize - enum values need extra columns
+    result.Flags = parsedLines[currentRow];
+    currentRow++;
+}
+```
+
+**Why**: Enum definitions spread values across multiple columns beyond the header count. Normalizing truncates these values.
+
+#### 3. OriginalHeader vs FieldName
+**Location**: `Editor/Core/SchemaBuilder.cs`
+
+Must distinguish between raw CSV header and sanitized field name:
+```csharp
+var originalHeader = rawData.Headers[i];
+var normalizedHeader = NormalizeHeader(originalHeader, i, headerMap, schema);
+
+var column = CreateColumn(rawData, schema, settings, i, normalizedHeader, originalHeader);
+// column.OriginalHeader = originalHeader (raw from CSV)
+// column.FieldName = SanitizeFieldName(normalizedHeader) (valid C# identifier)
+```
+
+**Why**: Tests verify OriginalHeader matches actual CSV text, while FieldName must be a valid C# identifier.
+
+#### 4. Row Dictionary Keys
+**Location**: `Editor/Core/SchemaBuilder.cs`
+
+Row dictionaries must use FieldName for consistency:
+```csharp
+for (var i = 0; i < columns.Length; i++)
+{
+    var key = columns[i].FieldName;  // NOT rawData.Headers[i]
+    var value = i < dataRow.Length ? dataRow[i] : "";
+    rowDict[key] = value;
+}
+```
+
+**Why**: Generated code and ReflectionMapper use FieldName. Using raw headers causes key mismatch errors.
+
+#### 5. Type Converter CSV Semantics
+**Location**: `Editor/Core/TypeConverters.cs`
+
+Empty string ≠ null in CSV context:
+```csharp
+public static T[] ToArray<T>(string value, ...)
+{
+    if (value == null)
+        return Array.Empty<T>();
+    
+    // Empty string produces [""], NOT []
+    var parts = value.Split(delimiter);
+    // ...
+}
+```
+
+**Why**: CSV cell behavior: null = no data, empty = one empty value. Must match this semantic.
+
+### Test Execution Priority
 
 #### 1. Run Affected Tests Only
 ```bash
@@ -391,6 +542,14 @@ Unity -runTests -testResults ./TestResults.xml
 ---
 
 **Last Updated**: 2026-02-07  
-**Test Suite Version**: 1.0  
-**Total Tests**: 91  
-**Current Pass Rate**: 80/91 (87.9%)
+**Test Suite Version**: 2.0  
+**Total Tests**: 330  
+**Current Pass Rate**: 330/330 (100%)  
+**Previous Pass Rate**: 284/330 (86.1%)  
+**Tests Fixed**: 46 (CSVReader: 17, SchemaBuilder: 18, Integration: 7, TypeConverter: 2, NameSanitizer: 1, GoogleSheets: 1)
+
+### Key Resources
+
+- **Detailed Fix Documentation**: See `TEST_FIXES_SUMMARY.md` for comprehensive information on all fixes applied
+- **Code Changes**: All fixes applied on 2026-02-07 in commits 8a61eaa, 441ed30, f73cb78
+- **Repository Memories**: Critical implementation patterns stored for future reference

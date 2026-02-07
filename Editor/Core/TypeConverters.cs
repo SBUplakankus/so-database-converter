@@ -180,8 +180,8 @@ namespace DataToScriptableObject.Editor
 
         public static T[] ToArray<T>(string value, string delimiter, Func<string, T> elementConverter)
         {
-            // Empty or whitespace-only strings should produce an array with one element
-            // This matches CSV behavior where an empty cell still represents one value
+            // Null values return an empty array.
+            // Empty or whitespace strings produce an array with one element (matching CSV behavior).
             if (value == null)
                 return Array.Empty<T>();
             
