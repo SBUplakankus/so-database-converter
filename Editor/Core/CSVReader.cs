@@ -62,6 +62,20 @@ namespace DataToScriptableObject.Editor
         }
 
         /// <summary>
+        /// Checks if the delimiter string appears at position pos in csvData
+        /// without allocating a substring.
+        /// </summary>
+        private static bool IsDelimiterAt(string csvData, int pos, string delimiter)
+        {
+            if (pos + delimiter.Length > csvData.Length)
+                return false;
+            for (int i = 0; i < delimiter.Length; i++)
+                if (csvData[pos + i] != delimiter[i])
+                    return false;
+            return true;
+        }
+
+        /// <summary>
         /// RFC 4180 compliant CSV line parser. Reads one logical record from csvData
         /// starting at position pos. Handles quoted fields with embedded delimiters,
         /// newlines, and escaped double-quotes.
@@ -120,14 +134,14 @@ namespace DataToScriptableObject.Editor
                         pos++; // consume newline
                         break;
                     }
-                    if (pos + delimLen <= csvData.Length && csvData.Substring(pos, delimLen) == delimiter)
+                    if (IsDelimiterAt(csvData, pos, delimiter))
                     {
                         pos += delimLen; // consume delimiter
                         continue;
                     }
-                    // Skip any trailing characters until delimiter or newline
-                    while (pos < csvData.Length && csvData[pos] != '\n' &&
-                           !(pos + delimLen <= csvData.Length && csvData.Substring(pos, delimLen) == delimiter))
+                    // Tolerate non-compliant trailing characters after closing quote
+                    // (e.g. stray whitespace or mismatched quotes in malformed input)
+                    while (pos < csvData.Length && csvData[pos] != '\n' && !IsDelimiterAt(csvData, pos, delimiter))
                     {
                         pos++;
                     }
@@ -136,7 +150,7 @@ namespace DataToScriptableObject.Editor
                         pos++;
                         break;
                     }
-                    if (pos + delimLen <= csvData.Length && csvData.Substring(pos, delimLen) == delimiter)
+                    if (IsDelimiterAt(csvData, pos, delimiter))
                     {
                         pos += delimLen;
                         continue;
@@ -147,8 +161,7 @@ namespace DataToScriptableObject.Editor
                 {
                     // Unquoted field — read until delimiter or newline
                     var start = pos;
-                    while (pos < csvData.Length && csvData[pos] != '\n' &&
-                           !(pos + delimLen <= csvData.Length && csvData.Substring(pos, delimLen) == delimiter))
+                    while (pos < csvData.Length && csvData[pos] != '\n' && !IsDelimiterAt(csvData, pos, delimiter))
                     {
                         pos++;
                     }
@@ -159,7 +172,7 @@ namespace DataToScriptableObject.Editor
                         pos++; // consume newline
                         break;
                     }
-                    if (pos + delimLen <= csvData.Length && csvData.Substring(pos, delimLen) == delimiter)
+                    if (IsDelimiterAt(csvData, pos, delimiter))
                     {
                         pos += delimLen; // consume delimiter
                         continue;
@@ -241,21 +254,22 @@ namespace DataToScriptableObject.Editor
             
             while (pos < csvData.Length)
             {
-                // Check if current line is a comment (only for unquoted lines)
-                // Peek at the line start to see if it's a comment
+                // Peek at the current line to check for comments/empty lines.
+                // This peek is safe because comment lines never start with a quote,
+                // so they won't be misinterpreted by ParseRecord.
                 var peekEnd = csvData.IndexOf('\n', pos);
                 if (peekEnd < 0) peekEnd = csvData.Length;
                 var peekLine = csvData.Substring(pos, peekEnd - pos).Trim();
                 
                 if (string.IsNullOrWhiteSpace(peekLine))
                 {
-                    pos = peekEnd < csvData.Length ? peekEnd + 1 : csvData.Length;
+                    pos = peekEnd + (peekEnd < csvData.Length ? 1 : 0);
                     continue;
                 }
 
                 if (IsComment(peekLine, commentPrefix))
                 {
-                    pos = peekEnd < csvData.Length ? peekEnd + 1 : csvData.Length;
+                    pos = peekEnd + (peekEnd < csvData.Length ? 1 : 0);
                     continue;
                 }
                 
