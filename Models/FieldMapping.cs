@@ -2,6 +2,7 @@ using System.Reflection;
 
 namespace DataToScriptableObject
 {
+    [System.Serializable]
     public class FieldMapping
     {
         public ColumnSchema column;

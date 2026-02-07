@@ -1,5 +1,6 @@
 namespace DataToScriptableObject
 {
+    [System.Serializable]
     public class GoogleSheetsParseResult
     {
         public bool isValid;

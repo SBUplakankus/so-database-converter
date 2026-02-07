@@ -33,6 +33,7 @@ namespace DataToScriptableObject
         }
     }
 
+    [System.Serializable]
     public class SourceValidationResult
     {
         public bool isValid;

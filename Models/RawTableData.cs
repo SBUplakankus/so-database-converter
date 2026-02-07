@@ -1,5 +1,6 @@
 namespace DataToScriptableObject
 {
+    [System.Serializable]
     public class RawTableData
     {
         public string[] directives;         // #class:, #database:, #namespace: lines

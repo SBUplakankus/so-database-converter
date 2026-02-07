@@ -2,6 +2,7 @@ using System.Collections.Generic;
 
 namespace DataToScriptableObject
 {
+    [System.Serializable]
     public class ImportResult
     {
         public int created;
