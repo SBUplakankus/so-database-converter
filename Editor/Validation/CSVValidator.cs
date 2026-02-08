@@ -183,8 +183,9 @@ namespace DataToScriptableObject.Editor
                 cachedSchemas = new TableSchema[] { schema };
                 return cachedSchemas;
             }
-            catch
+            catch (Exception ex)
             {
+                UnityEngine.Debug.LogError($"Failed to extract schemas from CSV file '{filePath}': {ex.Message}");
                 return new TableSchema[0];
             }
         }

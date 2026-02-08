@@ -126,15 +126,15 @@ namespace DataToScriptableObject.Tests.Editor
         [Test]
         public void TestUnexpectedExtension()
         {
-            string txtFilePath = Path.Combine(tempDir, "data.json");
-            File.WriteAllText(txtFilePath,
+            string jsonFilePath = Path.Combine(tempDir, "data.json");
+            File.WriteAllText(jsonFilePath,
                 "id,name,value\n" +
                 "int,string,float\n" +
                 "key,name,optional\n" +
                 "1,Item1,10.5\n");
 
             var settings = new GenerationSettings();
-            var validator = new CSVValidator(txtFilePath, settings);
+            var validator = new CSVValidator(jsonFilePath, settings);
 
             var result = validator.ValidateQuick();
 
