@@ -283,9 +283,9 @@ int,int,float,float
             var code = CodeGenerator.GenerateScriptableObject(schema, GetDefaultSettings());
             
             // Verify Range attributes in generated code
-            Assert.IsTrue(code.Contains("[Range(0, 100)]"), "health should have Range(0, 100)");
-            Assert.IsTrue(code.Contains("[Range(1, 50)]"), "damage should have Range(1, 50)");
-            Assert.IsTrue(code.Contains("[Range(0f, 10f)]"), "speed should have Range(0f, 10f)");
+            Assert.IsTrue(code.Contains("[Range(0f, 100f)]"), "health should have Range(0f, 100f)");
+            Assert.IsTrue(code.Contains("[Range(1f, 50f)]"), "damage should have Range(1f, 50f)");
+            Assert.IsTrue(code.Contains("[Range(0.0f, 10.0f)]"), "speed should have Range(0.0f, 10.0f)");
         }
 
         [Test]
@@ -484,7 +484,7 @@ key,name,range(0;200),range(0.1;5.0),range(0.5;10.0),Common,Rare,Epic,Legendary,
             
             // Verify Range attributes
             Assert.IsTrue(code.Contains("[Range(0f, 200f)]"));
-            Assert.IsTrue(code.Contains("[Range(0.1f, 5f)]"));
+            Assert.IsTrue(code.Contains("[Range(0.1f, 5.0f)]"));
         }
 
         [Test]
