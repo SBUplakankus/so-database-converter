@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.VisualBasic.FileIO;
+using System.Text;
 
 namespace DataToScriptableObject.Editor
 {
@@ -42,6 +42,15 @@ namespace DataToScriptableObject.Editor
             return false;
         }
         
+        private static bool IsComment(string trimmedLine, string commentPrefix)
+        {
+            if (trimmedLine.StartsWith("//"))
+                return true;
+            if (!string.IsNullOrEmpty(commentPrefix) && trimmedLine.StartsWith(commentPrefix) && !IsDirective(trimmedLine))
+                return true;
+            return false;
+        }
+        
         private static string[] NormalizeRow(string[] row, int length)
         {
             if (row.Length == length)
@@ -50,6 +59,129 @@ namespace DataToScriptableObject.Editor
             var result = new string[length];
             Array.Copy(row, result, Math.Min(row.Length, length));
             return result;
+        }
+
+        /// <summary>
+        /// Checks if the delimiter string appears at position pos in csvData
+        /// without allocating a substring.
+        /// </summary>
+        private static bool IsDelimiterAt(string csvData, int pos, string delimiter)
+        {
+            if (pos + delimiter.Length > csvData.Length)
+                return false;
+            for (int i = 0; i < delimiter.Length; i++)
+                if (csvData[pos + i] != delimiter[i])
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        /// RFC 4180 compliant CSV line parser. Reads one logical record from csvData
+        /// starting at position pos. Handles quoted fields with embedded delimiters,
+        /// newlines, and escaped double-quotes.
+        /// Returns null when there is no more data to read.
+        /// </summary>
+        private static string[] ParseRecord(string csvData, ref int pos, string delimiter)
+        {
+            if (pos >= csvData.Length)
+                return null;
+
+            var fields = new List<string>();
+            var delimLen = delimiter.Length;
+
+            while (true)
+            {
+                if (pos >= csvData.Length)
+                {
+                    // End of data after a delimiter — trailing empty field
+                    fields.Add("");
+                    break;
+                }
+
+                if (csvData[pos] == '"')
+                {
+                    // Quoted field
+                    pos++; // skip opening quote
+                    var sb = new StringBuilder();
+                    while (pos < csvData.Length)
+                    {
+                        if (csvData[pos] == '"')
+                        {
+                            if (pos + 1 < csvData.Length && csvData[pos + 1] == '"')
+                            {
+                                // Escaped double-quote
+                                sb.Append('"');
+                                pos += 2;
+                            }
+                            else
+                            {
+                                // Closing quote
+                                pos++; // skip closing quote
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            sb.Append(csvData[pos]);
+                            pos++;
+                        }
+                    }
+                    fields.Add(sb.ToString());
+
+                    // After closing quote, expect delimiter or end of line/data
+                    if (pos < csvData.Length && csvData[pos] == '\n')
+                    {
+                        pos++; // consume newline
+                        break;
+                    }
+                    if (IsDelimiterAt(csvData, pos, delimiter))
+                    {
+                        pos += delimLen; // consume delimiter
+                        continue;
+                    }
+                    // Tolerate non-compliant trailing characters after closing quote
+                    // (e.g. stray whitespace or mismatched quotes in malformed input)
+                    while (pos < csvData.Length && csvData[pos] != '\n' && !IsDelimiterAt(csvData, pos, delimiter))
+                    {
+                        pos++;
+                    }
+                    if (pos < csvData.Length && csvData[pos] == '\n')
+                    {
+                        pos++;
+                        break;
+                    }
+                    if (IsDelimiterAt(csvData, pos, delimiter))
+                    {
+                        pos += delimLen;
+                        continue;
+                    }
+                    break; // end of data
+                }
+                else
+                {
+                    // Unquoted field — read until delimiter or newline
+                    var start = pos;
+                    while (pos < csvData.Length && csvData[pos] != '\n' && !IsDelimiterAt(csvData, pos, delimiter))
+                    {
+                        pos++;
+                    }
+                    fields.Add(csvData.Substring(start, pos - start));
+
+                    if (pos < csvData.Length && csvData[pos] == '\n')
+                    {
+                        pos++; // consume newline
+                        break;
+                    }
+                    if (IsDelimiterAt(csvData, pos, delimiter))
+                    {
+                        pos += delimLen; // consume delimiter
+                        continue;
+                    }
+                    break; // end of data
+                }
+            }
+
+            return fields.ToArray();
         }
         
         #endregion
@@ -61,8 +193,9 @@ namespace DataToScriptableObject.Editor
             if (string.IsNullOrEmpty(csvText))
                 return EmptyResult();
 
-            // Remove BOM if present
-            if (csvText.StartsWith("\uFEFF"))
+            // Remove BOM if present (must use Ordinal comparison — culture-sensitive
+            // StartsWith treats the zero-width BOM as matching any string)
+            if (csvText.Length > 0 && csvText[0] == '\uFEFF')
                 csvText = csvText.Substring(1);
 
             // Normalize line endings
@@ -87,9 +220,7 @@ namespace DataToScriptableObject.Editor
                         {
                             directives.Add(line);
                         }
-                        else if (string.IsNullOrWhiteSpace(trimmed) || 
-                                trimmed.StartsWith(commentPrefix) || 
-                                trimmed.StartsWith("//"))
+                        else if (string.IsNullOrWhiteSpace(trimmed) || IsComment(trimmed, commentPrefix))
                         {
                             // Skip empty lines and comments in prelude
                         }
@@ -102,7 +233,6 @@ namespace DataToScriptableObject.Editor
                     }
                     else
                     {
-                        // After prelude, collect all lines for TextFieldParser
                         csvDataLines.Add(line);
                     }
                 }
@@ -118,42 +248,34 @@ namespace DataToScriptableObject.Editor
             if (delimiter == "auto")
                 delimiter = DetectDelimiterFromText(csvData, commentPrefix);
             
-            // Parse CSV using TextFieldParser - let it handle all the complexity
+            // Parse CSV records using custom RFC 4180 parser
             var parsedLines = new List<string[]>();
+            int pos = 0;
             
-            using (var reader = new StringReader(csvData))
-            using (var parser = new TextFieldParser(reader))
+            while (pos < csvData.Length)
             {
-                parser.TextFieldType = FieldType.Delimited;
-                parser.SetDelimiters(delimiter);
-                parser.HasFieldsEnclosedInQuotes = true;
-                parser.TrimWhiteSpace = false;
+                // Peek at the current line to check for comments/empty lines.
+                // This peek is safe because comment lines never start with a quote,
+                // so they won't be misinterpreted by ParseRecord.
+                var peekEnd = csvData.IndexOf('\n', pos);
+                if (peekEnd < 0) peekEnd = csvData.Length;
+                var peekLine = csvData.Substring(pos, peekEnd - pos).Trim();
                 
-                // Since we've already extracted directives, we still need to skip 
-                // comment lines in the data section (after headers)
-                if (!string.IsNullOrEmpty(commentPrefix))
+                if (string.IsNullOrWhiteSpace(peekLine))
                 {
-                    parser.CommentTokens = new[] { commentPrefix, "//" };
-                }
-                else
-                {
-                    parser.CommentTokens = new[] { "//" };
+                    pos = peekEnd + (peekEnd < csvData.Length ? 1 : 0);
+                    continue;
                 }
 
-                while (!parser.EndOfData)
+                if (IsComment(peekLine, commentPrefix))
                 {
-                    try
-                    {
-                        string[] fields = parser.ReadFields();
-                        if (fields != null)
-                            parsedLines.Add(fields);
-                    }
-                    catch (MalformedLineException)
-                    {
-                        // Skip malformed lines - TextFieldParser will handle most edge cases
-                        continue;
-                    }
+                    pos = peekEnd + (peekEnd < csvData.Length ? 1 : 0);
+                    continue;
                 }
+                
+                var fields = ParseRecord(csvData, ref pos, delimiter);
+                if (fields != null && fields.Length > 0)
+                    parsedLines.Add(fields);
             }
 
             if (parsedLines.Count == 0)
@@ -227,9 +349,7 @@ namespace DataToScriptableObject.Editor
                 while ((line = reader.ReadLine()) != null && lines.Count < 5)
                 {
                     var trimmed = line.Trim();
-                    if (!string.IsNullOrWhiteSpace(trimmed) && 
-                        !trimmed.StartsWith(commentPrefix) && 
-                        !trimmed.StartsWith("//"))
+                    if (!string.IsNullOrWhiteSpace(trimmed) && !IsComment(trimmed, commentPrefix))
                     {
                         lines.Add(line);
                     }
