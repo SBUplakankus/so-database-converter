@@ -1,14 +1,16 @@
 # Data to ScriptableObject
 
-Unity Editor tool that converts CSV files and Google Sheets into typed ScriptableObject assets with automatic code generation.
+Unity Editor tool that converts CSV files, Google Sheets, and SQLite databases into typed ScriptableObject assets with automatic code generation.
 
 ## Features
 
 - **CSV Import** - RFC 4180 compliant parser with multi-row header convention
 - **Google Sheets Integration** - Import directly from published Google Sheets URLs
+- **SQLite Database Import** - Import relational databases with automatic foreign key resolution
 - **Automatic Code Generation** - Generate ScriptableObject classes from your data
 - **Type System** - Support for Unity types: int, float, bool, string, Vector2/3, Color, Sprite, Prefab, arrays, enums
 - **Smart Type Inference** - Automatically detect types from CSV data
+- **Foreign Key Support** - SQLite foreign keys become ScriptableObject references
 - **Validation** - Range constraints, required fields, tooltips
 - **Flexible Mapping** - Use existing classes or generate new ones
 
@@ -25,17 +27,28 @@ https://github.com/SBUplakankus/so-database-converter.git
 ## Quick Start
 
 1. Open `Tools > Data to ScriptableObject`
-2. Select a CSV file or paste a Google Sheets URL
-3. Configure generation settings
-4. Click Import to generate ScriptableObject class and assets
+2. Select a source type (CSV, Google Sheets, or SQLite)
+3. Choose your data file or enter URL
+4. For SQLite: Select which tables to import
+5. Configure generation settings
+6. Click Generate to create ScriptableObject class and assets
 
-See the [Sample CSV files](Samples~/CSV/) for format examples.
+See the [Sample CSV files](Samples~/CSV/) and [Sample SQLite database](Samples~/SQLite/) for format examples.
+
+## SQLite Features (New in v0.2.0)
+
+- Import tables with foreign key relationships
+- Automatic dependency resolution and topological sorting
+- Foreign keys become direct ScriptableObject references
+- CHECK constraints mapped to Range attributes
+- CHECK IN clauses generate enum types
+- Multi-table import with relationship visualization
 
 ## Development Status
 
-**Current Version**: 0.1.0 (Foundation Phase)
+**Current Version**: 0.2.0 (SQLite Phase Complete)
 
-This package is under active development. The foundation (Models, Core Logic, Tests) is complete. Editor UI and additional features are coming in future updates.
+Phase 1 (CSV/Foundation) and Phase 2 (SQLite) are complete. The tool now supports CSV and SQLite database import with full foreign key relationship support.
 
 ## License
 
