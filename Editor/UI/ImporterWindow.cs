@@ -350,10 +350,20 @@ namespace DataToScriptableObject.Editor.UI
             {
                 switch (sourceType)
                 {
+                    case SourceType.CSV:
+                        ValidateCSVSource();
+                        break;
                     case SourceType.SQLite:
                         ValidateSQLiteSource();
                         break;
-                    // TODO: Add CSV and Google Sheets validation
+                    case SourceType.GoogleSheets:
+                        validationResult = new SourceValidationResult
+                        {
+                            Status = SourceStatus.NotLoaded,
+                            IsValid = false,
+                            ErrorMessage = "Google Sheets validation not yet implemented"
+                        };
+                        break;
                     default:
                         validationResult = new SourceValidationResult
                         {
@@ -378,6 +388,25 @@ namespace DataToScriptableObject.Editor.UI
                 isValidating = false;
                 Repaint();
             }
+        }
+
+        private void ValidateCSVSource()
+        {
+            var validator = new CSVValidator(sourceFilePath, settings);
+            
+            // Quick validation
+            validationResult = validator.ValidateQuick();
+            if (!validationResult.IsValid)
+            {
+                return;
+            }
+
+            // Full validation (synchronous for simplicity)
+            validator.ValidateFull(result =>
+            {
+                validationResult = result;
+                Repaint();
+            });
         }
 
         private void ValidateSQLiteSource()
