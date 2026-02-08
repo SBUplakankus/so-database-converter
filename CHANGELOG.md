@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-02-08
+
+### Fixed
+- SchemaBuilder: OriginalHeader now uses normalized header for empty/duplicate columns
+- CodeGenerator: GenerateScriptableObject now includes database class in output
+- CodeGenerator: Auto-generate tooltips when GenerateTooltips is enabled
+- CodeGenerator: Multiline attribute support ([Multiline(N)])
+- SchemaBuilder: Parse multiline(N) flag in flags row
+- NameSanitizer: Added SanitizeNamespace for safe namespace identifiers
+- CodeGenerator: Namespace sanitization in generated code
+- FullPipelineTests: Corrected Range attribute format expectations
+
+### Test Results
+- 14 previously-failing full pipeline tests now pass
+- All 466 tests passing (100%)
+
 ## [0.1.0] - 2026-02-07
 
 ### Added

@@ -9,10 +9,23 @@ unity_version: "2021.3+"
 test_mode: Unity Test Runner (EditMode)
 test_directory: Tests/Editor/
 test_assembly: DataToScriptableObject.Tests.Editor.asmdef
-current_status: All 330 tests passing (as of 2026-02-07)
+current_status: All 466 tests passing (as of 2026-02-08)
 ```
 
-### Recent Test Fixes (2026-02-07)
+### Recent Test Fixes (2026-02-08)
+
+**Summary**: Fixed all 14 failing full pipeline tests by addressing 6 root causes.
+
+**Before**: 452/466 passing (97.0%)  
+**After**: 466/466 passing (100%)
+
+**Files Modified**:
+- `Editor/Core/SchemaBuilder.cs` - OriginalHeader uses normalizedHeader; multiline flag parsing
+- `Editor/Core/CodeGenerator.cs` - Database class in GenerateScriptableObject; auto-tooltips; multiline attribute; namespace sanitization
+- `Editor/Core/NameSanitizer.cs` - SanitizeNamespace method
+- `Tests/Editor/FullPipelineTests.cs` - Range attribute format expectations
+
+### Previous Test Fixes (2026-02-07)
 
 **Summary**: Fixed all 46 failing tests by addressing core issues in 5 components.
 
@@ -108,14 +121,14 @@ fix_location: Editor/Core/CSVReader.cs lines 169-173
 fix_date: 2026-02-07
 ```
 
-#### Pattern 3: OriginalHeader Incorrect (FIXED)
+#### Pattern 3: OriginalHeader for Duplicates/Empties (RE-FIXED 2026-02-08)
 ```yaml
-symptom: "Expected: 'MyColumn', But was: 'yColumn' (first char missing)"
-root_cause: OriginalHeader set to normalized header instead of raw CSV header
-solution: Pass both normalizedHeader and originalHeader to CreateColumn
-affected_tests: TestOriginalHeaderPreserved, TestFieldNameSanitization, 8+ others
-fix_location: Editor/Core/SchemaBuilder.cs lines 119-127, 176-191
-fix_date: 2026-02-07
+symptom: "Expected string length 8 but was 0 (empty OriginalHeader)"
+root_cause: OriginalHeader was set to raw header, but tests expect normalizedHeader for duplicates/empties
+solution: OriginalHeader = normalizedHeader (includes column_N for empties, name_2 for duplicates)
+affected_tests: TestDuplicateHeaders, TestEmptyHeader, TestEmptyHeaderAtMiddle, TestMultipleDuplicateHeaders, TestAllEmptyHeaders
+fix_location: Editor/Core/SchemaBuilder.cs line 121
+fix_date: 2026-02-08
 ```
 
 #### Pattern 4: Tab Character Not Handled (FIXED)
@@ -180,10 +193,10 @@ status: FIXED (see repository memories)
 
 ### Current Test Suite Status
 
-**Total Tests**: 330  
-**Passing**: 330 (100%)  
+**Total Tests**: 466  
+**Passing**: 466 (100%)  
 **Failing**: 0  
-**Last Full Run**: 2026-02-07 18:18:06Z  
+**Last Full Run**: 2026-02-08  
 **Duration**: ~0.126 seconds
 
 ### Test Count by File
@@ -240,17 +253,17 @@ if (headerRowCount >= 3 && parsedLines.Count > currentRow)
 #### 3. OriginalHeader vs FieldName
 **Location**: `Editor/Core/SchemaBuilder.cs`
 
-Must distinguish between raw CSV header and sanitized field name:
+OriginalHeader stores the normalized header (after de-duplication/empty-fill), FieldName is the C#-safe version:
 ```csharp
 var originalHeader = rawData.Headers[i];
 var normalizedHeader = NormalizeHeader(originalHeader, i, headerMap, schema);
 
 var column = CreateColumn(rawData, schema, settings, i, normalizedHeader, originalHeader);
-// column.OriginalHeader = originalHeader (raw from CSV)
+// column.OriginalHeader = normalizedHeader (de-duplicated, column_N for empties)
 // column.FieldName = SanitizeFieldName(normalizedHeader) (valid C# identifier)
 ```
 
-**Why**: Tests verify OriginalHeader matches actual CSV text, while FieldName must be a valid C# identifier.
+**Why**: OriginalHeader provides a unique identifier per column (handling duplicates like `a_2` and empties like `column_0`), while FieldName must be a valid C# identifier.
 
 #### 4. Row Dictionary Keys
 **Location**: `Editor/Core/SchemaBuilder.cs`
@@ -541,12 +554,12 @@ Unity -runTests -testResults ./TestResults.xml
 
 ---
 
-**Last Updated**: 2026-02-07  
-**Test Suite Version**: 2.0  
-**Total Tests**: 330  
-**Current Pass Rate**: 330/330 (100%)  
-**Previous Pass Rate**: 284/330 (86.1%)  
-**Tests Fixed**: 46 (CSVReader: 17, SchemaBuilder: 18, Integration: 7, TypeConverter: 2, NameSanitizer: 1, GoogleSheets: 1)
+**Last Updated**: 2026-02-08  
+**Test Suite Version**: 2.1  
+**Total Tests**: 466  
+**Current Pass Rate**: 466/466 (100%)  
+**Previous Pass Rate**: 452/466 (97.0%)  
+**Tests Fixed**: 14 (SchemaBuilder: 5, FullPipeline: 9)
 
 ### Key Resources
 
