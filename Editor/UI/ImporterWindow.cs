@@ -123,8 +123,13 @@ namespace DataToScriptableObject.Editor.UI
             sourceFileObject = EditorGUILayout.ObjectField("CSV File", sourceFileObject, typeof(UnityEngine.Object), false);
             if (EditorGUI.EndChangeCheck() && sourceFileObject != null)
             {
-                sourceFilePath = AssetDatabase.GetAssetPath(sourceFileObject);
-                ValidateSource();
+                string assetPath = AssetDatabase.GetAssetPath(sourceFileObject);
+                if (!string.IsNullOrEmpty(assetPath))
+                {
+                    // Convert Unity asset path to absolute file system path
+                    sourceFilePath = ConvertAssetPathToAbsolute(assetPath);
+                    ValidateSource();
+                }
             }
         }
 
@@ -149,10 +154,11 @@ namespace DataToScriptableObject.Editor.UI
             sourceFileObject = EditorGUILayout.ObjectField("Database File", sourceFileObject, typeof(DefaultAsset), false);
             if (EditorGUI.EndChangeCheck() && sourceFileObject != null)
             {
-                sourceFilePath = AssetDatabase.GetAssetPath(sourceFileObject);
-                if (!string.IsNullOrEmpty(sourceFilePath))
+                string assetPath = AssetDatabase.GetAssetPath(sourceFileObject);
+                if (!string.IsNullOrEmpty(assetPath))
                 {
-                    sourceFilePath = Path.GetFullPath(sourceFilePath);
+                    // Convert Unity asset path to absolute file system path
+                    sourceFilePath = ConvertAssetPathToAbsolute(assetPath);
                     ValidateSource();
                 }
             }
@@ -510,6 +516,35 @@ namespace DataToScriptableObject.Editor.UI
         {
             // Save settings to EditorPrefs
             // TODO: Implement settings persistence
+        }
+
+        /// <summary>
+        /// Converts a Unity asset path (e.g., "Assets/Samples~/SQLite/game.db") to an absolute file system path.
+        /// </summary>
+        private string ConvertAssetPathToAbsolute(string assetPath)
+        {
+            // AssetDatabase.GetAssetPath returns paths relative to the project root
+            // Application.dataPath returns the absolute path to the Assets folder
+            // So we need to remove "Assets/" from the start and combine with the project root
+            
+            if (assetPath.StartsWith("Assets/"))
+            {
+                // Get project root (parent of Assets folder)
+                string projectRoot = Path.GetDirectoryName(Application.dataPath);
+                // Combine with the asset path
+                return Path.GetFullPath(Path.Combine(projectRoot, assetPath));
+            }
+            else if (assetPath.StartsWith("Packages/"))
+            {
+                // For package assets, just try to resolve as-is
+                string projectRoot = Path.GetDirectoryName(Application.dataPath);
+                return Path.GetFullPath(Path.Combine(projectRoot, assetPath));
+            }
+            else
+            {
+                // Already an absolute path or unknown format
+                return Path.GetFullPath(assetPath);
+            }
         }
 
         private class TableSelectionInfo
