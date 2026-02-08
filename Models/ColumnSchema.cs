@@ -14,13 +14,13 @@ namespace DataToScriptableObject
         public bool IsSkipped { get; set; }
         public bool IsList { get; set; }
         public string[] EnumValues { get; set; }
-        public string DefaultValue { get; }
+        public string DefaultValue { get; set; }
         public Dictionary<string, string> Attributes { get; set; }
 
-        // Reserved for v2 SQLite support — leave these fields in place
-        public bool IsForeignKey { get; }
-        public string ForeignKeyTable { get; }
-        public string ForeignKeyColumn { get; }
-        public string ForeignKeySoType { get; }
+        // V2 SQLite support — foreign key fields
+        public bool IsForeignKey { get; set; }
+        public string ForeignKeyTable { get; set; }
+        public string ForeignKeyColumn { get; set; }
+        public string ForeignKeySoType { get; set; }
     }
 }
