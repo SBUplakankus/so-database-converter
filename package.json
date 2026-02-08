@@ -1,10 +1,10 @@
 {
   "name": "com.data-to-scriptableobject",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Data to ScriptableObject",
-  "description": "Convert CSV files and Google Sheets into typed ScriptableObject assets with automatic code generation.",
+  "description": "Convert CSV files, Google Sheets, and SQLite databases into typed ScriptableObject assets with automatic code generation.",
   "unity": "2021.3",
-  "keywords": ["csv", "google-sheets", "scriptableobject", "database", "import", "codegen"],
+  "keywords": ["csv", "google-sheets", "sqlite", "scriptableobject", "database", "import", "codegen"],
   "license": "MIT",
   "author": {
     "name": "SBUplakankus"
@@ -14,6 +14,11 @@
       "displayName": "CSV Examples",
       "description": "Example CSV files demonstrating the multi-row header convention.",
       "path": "Samples~/CSV"
+    },
+    {
+      "displayName": "SQLite Examples",
+      "description": "Example SQLite database with relational tables and foreign keys.",
+      "path": "Samples~/SQLite"
     }
   ]
 }

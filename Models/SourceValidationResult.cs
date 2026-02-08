@@ -36,13 +36,13 @@ namespace DataToScriptableObject
     [System.Serializable]
     public class SourceValidationResult
     {
-        public bool IsValid { get; }
-        public SourceStatus Status { get; }
-        public string ErrorMessage { get; }
-        public List<ValidationWarning> Warnings { get; } = new List<ValidationWarning>();
-        public int TableCount { get; }
-        public int TotalRowCount { get; }
-        public int TotalColumnCount { get; }
-        public string[] TableNames { get; }
+        public bool IsValid { get; set; }
+        public SourceStatus Status { get; set; }
+        public string ErrorMessage { get; set; }
+        public List<ValidationWarning> Warnings { get; set; } = new List<ValidationWarning>();
+        public int TableCount { get; set; }
+        public int TotalRowCount { get; set; }
+        public int TotalColumnCount { get; set; }
+        public string[] TableNames { get; set; }
     }
 }

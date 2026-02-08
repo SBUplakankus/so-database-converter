@@ -83,7 +83,7 @@ namespace DataToScriptableObject.Editor
             return result;
         }
 
-        private static string ConvertToCase(string input, NamingCase namingCase)
+        public static string ConvertToCase(string input, NamingCase namingCase)
         {
             input = input.Replace('-', ' ');
             input = input.Replace('_', ' ');
