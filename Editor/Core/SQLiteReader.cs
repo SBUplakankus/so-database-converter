@@ -80,128 +80,157 @@ namespace DataToScriptableObject.Editor
         }
 
         private TableSchema ProcessTable(
-            SQLiteConnection connection,
-            string tableName,
-            string ddl,
-            GenerationSettings settings,
-            List<ValidationWarning> warnings)
+    SQLiteConnection connection,
+    string tableName,
+    string ddl,
+    GenerationSettings settings,
+    List<ValidationWarning> warnings)
+{
+    // Read column info
+    var columnInfos = connection.Query<ColumnInfo>($"PRAGMA table_info({tableName})");
+    
+    // Read foreign keys
+    var foreignKeys = connection.Query<ForeignKeyInfo>($"PRAGMA foreign_key_list({tableName})");
+    var fkMap = foreignKeys.ToDictionary(fk => fk.from);
+
+    // Parse DDL constraints
+    var constraints = SQLiteSchemaParser.ParseDDL(ddl);
+
+    // Build column schemas
+    var columns = new List<ColumnSchema>();
+
+    foreach (var colInfo in columnInfos)
+    {
+        var column = new ColumnSchema
         {
-            // Read column info
-            var columnInfos = connection.Query<ColumnInfo>($"PRAGMA table_info({tableName})");
-            
-            // Read foreign keys
-            var foreignKeys = connection.Query<ForeignKeyInfo>($"PRAGMA foreign_key_list({tableName})");
-            var fkMap = foreignKeys.ToDictionary(fk => fk.from);
+            OriginalHeader = colInfo.name,
+            FieldName = NameSanitizer.SanitizeFieldName(colInfo.name),
+            IsOptional = colInfo.notnull == 0,
+            DefaultValue = colInfo.dflt_value,
+            IsKey = colInfo.pk == 1,
+            Attributes = new Dictionary<string, string>()
+        };
 
-            // Parse DDL constraints
-            var constraints = SQLiteSchemaParser.ParseDDL(ddl);
-
-            // Build column schemas
-            var columns = new List<ColumnSchema>();
-
-            foreach (var colInfo in columnInfos)
+        // Map SQLite type to ResolvedType
+        column.Type = SQLiteTypeMapper.Map(colInfo.type, out string typeWarning);
+        if (typeWarning != null)
+        {
+            warnings.Add(new ValidationWarning
             {
-                var column = new ColumnSchema
-                {
-                    OriginalHeader = colInfo.name,
-                    FieldName = NameSanitizer.SanitizeFieldName(colInfo.name),
-                    IsOptional = colInfo.notnull == 0,
-                    DefaultValue = colInfo.dflt_value,
-                    IsKey = colInfo.pk == 1,
-                    Attributes = new Dictionary<string, string>()
-                };
-
-                // Map SQLite type to ResolvedType
-                column.Type = SQLiteTypeMapper.Map(colInfo.type, out string typeWarning);
-                if (typeWarning != null)
-                {
-                    warnings.Add(new ValidationWarning
-                    {
-                        level = WarningLevel.Warning,
-                        table = tableName,
-                        column = colInfo.name,
-                        message = typeWarning
-                    });
-                }
-
-                // Check for foreign key
-                if (fkMap.ContainsKey(colInfo.name))
-                {
-                    var fk = fkMap[colInfo.name];
-                    column.IsForeignKey = true;
-                    column.ForeignKeyTable = fk.table;
-                    column.ForeignKeyColumn = fk.to;
-                    column.ForeignKeySoType = NameSanitizer.ConvertToCase(fk.table, NamingCase.PascalCase) + "Entry";
-                    column.Type = ResolvedType.Asset;
-                }
-
-                // Apply DDL constraints
-                if (constraints.ContainsKey(colInfo.name))
-                {
-                    var constraint = constraints[colInfo.name];
-
-                    if (constraint.RangeMin.HasValue && constraint.RangeMax.HasValue)
-                    {
-                        column.Attributes["range"] = $"{constraint.RangeMin.Value},{constraint.RangeMax.Value}";
-                    }
-
-                    if (constraint.CheckInValues != null && constraint.CheckInValues.Length > 0)
-                    {
-                        // Convert to enum if currently string or int
-                        if (column.Type == ResolvedType.String || column.Type == ResolvedType.Int)
-                        {
-                            column.Type = ResolvedType.Enum;
-                            column.EnumValues = constraint.CheckInValues;
-                        }
-                    }
-
-                    if (constraint.IsUnique)
-                    {
-                        warnings.Add(new ValidationWarning
-                        {
-                            level = WarningLevel.Info,
-                            table = tableName,
-                            column = colInfo.name,
-                            message = $"Column '{colInfo.name}' is UNIQUE — duplicate values will cause asset naming collisions."
-                        });
-                    }
-                }
-
-                columns.Add(column);
-            }
-
-            // Read all data rows
-            var rows = new List<Dictionary<string, string>>();
-            var cmd = connection.CreateCommand($"SELECT * FROM {tableName}");
-            var reader = cmd.ExecuteReader();
-            
-            while (reader.Read())
-            {
-                var rowDict = new Dictionary<string, string>();
-                for (int i = 0; i < reader.FieldCount; i++)
-                {
-                    string columnName = reader.GetName(i);
-                    object value = reader.GetValue(i);
-                    var column = columns.FirstOrDefault(c => c.OriginalHeader == columnName);
-                    rowDict[columnName] = ConvertValue(value, column);
-                }
-                rows.Add(rowDict);
-            }
-
-            // Build schema
-            var schema = new TableSchema
-            {
-                ClassName = NameSanitizer.ConvertToCase(tableName, NamingCase.PascalCase) + "Entry",
-                DatabaseName = NameSanitizer.ConvertToCase(tableName, NamingCase.PascalCase) + "Database",
-                NamespaceName = settings?.NamespaceName ?? "",
-                SourceTableName = tableName,
-                Columns = columns.ToArray(),
-                Rows = rows,
-                Warnings = new List<ValidationWarning>()
-            };
-
-            return schema;
+                level = WarningLevel.Warning,
+                table = tableName,
+                column = colInfo.name,
+                message = typeWarning
+            });
         }
+
+        // Check for foreign key
+        if (fkMap.ContainsKey(colInfo.name))
+        {
+            var fk = fkMap[colInfo.name];
+            column.IsForeignKey = true;
+            column.ForeignKeyTable = fk.table;
+            column.ForeignKeyColumn = fk.to;
+            column.ForeignKeySoType = NameSanitizer.ConvertToCase(fk.table, NamingCase.PascalCase) + "Entry";
+            column.Type = ResolvedType.Asset;
+        }
+
+        // Apply DDL constraints
+        if (constraints.ContainsKey(colInfo.name))
+        {
+            var constraint = constraints[colInfo.name];
+
+            if (constraint.RangeMin.HasValue && constraint.RangeMax.HasValue)
+            {
+                column.Attributes["range"] = $"{constraint.RangeMin.Value},{constraint.RangeMax.Value}";
+            }
+
+            if (constraint.CheckInValues != null && constraint.CheckInValues.Length > 0)
+            {
+                // Convert to enum if currently string or int
+                if (column.Type == ResolvedType.String || column.Type == ResolvedType.Int)
+                {
+                    column.Type = ResolvedType.Enum;
+                    column.EnumValues = constraint.CheckInValues;
+                }
+            }
+
+            if (constraint.IsUnique)
+            {
+                warnings.Add(new ValidationWarning
+                {
+                    level = WarningLevel.Info,
+                    table = tableName,
+                    column = colInfo.name,
+                    message = $"Column '{colInfo.name}' is UNIQUE — duplicate values will cause asset naming collisions."
+                });
+            }
+        }
+
+        columns.Add(column);
+    }
+
+    // Read all data rows using SQLite-net's Query method
+    var rows = new List<Dictionary<string, string>>();
+    var columnNames = columns.Select(c => c.OriginalHeader).ToList();
+    
+    // Query all rows - SQLite-net will return List<object[]>
+    var query = $"SELECT * FROM {tableName}";
+    
+    // Use the lower-level Execute method to get raw row data
+    var stmt = SQLite3.Prepare2(connection.Handle, query);
+    while (SQLite3.Step(stmt) == SQLite3.Result.Row)
+    {
+        var rowDict = new Dictionary<string, string>();
+            
+        for (int i = 0; i < columns.Count; i++)
+        {
+            var columnName = columns[i].OriginalHeader;
+            var column = columns[i];
+                
+            // Get the value based on column type
+            object value = null;
+            var colType = SQLite3.ColumnType(stmt, i);
+                
+            switch (colType)
+            {
+                case SQLite3.ColType.Integer:
+                    value = SQLite3.ColumnInt64(stmt, i);
+                    break;
+                case SQLite3.ColType.Float:
+                    value = SQLite3.ColumnDouble(stmt, i);
+                    break;
+                case SQLite3.ColType.Text:
+                    value = SQLite3.ColumnString(stmt, i);
+                    break;
+                case SQLite3.ColType.Blob:
+                    value = SQLite3.ColumnBlob(stmt, i);
+                    break;
+                case SQLite3.ColType.Null:
+                    value = null;
+                    break;
+            }
+                
+            rowDict[columnName] = ConvertValue(value, column);
+        }
+            
+        rows.Add(rowDict);
+    }
+
+    // Build schema
+    var schema = new TableSchema
+    {
+        ClassName = NameSanitizer.ConvertToCase(tableName, NamingCase.PascalCase) + "Entry",
+        DatabaseName = NameSanitizer.ConvertToCase(tableName, NamingCase.PascalCase) + "Database",
+        NamespaceName = settings?.NamespaceName ?? "",
+        SourceTableName = tableName,
+        Columns = columns.ToArray(),
+        Rows = rows,
+        Warnings = new List<ValidationWarning>()
+    };
+
+    return schema;
+}
 
         private string ConvertValue(object value, ColumnSchema column)
         {

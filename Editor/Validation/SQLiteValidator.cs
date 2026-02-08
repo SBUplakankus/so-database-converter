@@ -38,7 +38,7 @@ namespace DataToScriptableObject.Editor
             {
                 var warning = new ValidationWarning
                 {
-                    level = WarningLevel.Info,
+                    level = WarningLevel.Warning,
                     message = $"Unexpected file extension '{ext}'. Attempting to read as SQLite anyway."
                 };
                 result.Warnings.Add(warning);
@@ -79,8 +79,10 @@ namespace DataToScriptableObject.Editor
                     $"Permission denied when reading file. {ex.Message}");
             }
 
-            // Basic checks passed
-            return CreateResult(SourceStatus.Valid, null);
+            // Basic checks passed - return the result we've been building
+            result.Status = SourceStatus.Valid;
+            result.IsValid = true;
+            return result;
         }
 
         public void ValidateFull(Action<SourceValidationResult> onComplete)
