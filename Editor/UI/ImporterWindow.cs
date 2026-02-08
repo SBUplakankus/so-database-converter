@@ -135,13 +135,13 @@ namespace DataToScriptableObject.Editor.UI
 
         private void DrawGoogleSheetsSourceUI()
         {
-            EditorGUILayout.HelpBox("Google Sheets import support - Paste a Google Sheets URL", MessageType.Info);
+            EditorGUILayout.HelpBox("Google Sheets import - Paste a Google Sheets URL or Spreadsheet ID", MessageType.Info);
             
             EditorGUI.BeginChangeCheck();
             sourceFilePath = EditorGUILayout.TextField("Sheets URL", sourceFilePath);
             if (EditorGUI.EndChangeCheck() && !string.IsNullOrEmpty(sourceFilePath))
             {
-                // TODO: Validate Google Sheets URL
+                ValidateSource();
             }
         }
 
@@ -363,12 +363,7 @@ namespace DataToScriptableObject.Editor.UI
                         ValidateSQLiteSource();
                         break;
                     case SourceType.GoogleSheets:
-                        validationResult = new SourceValidationResult
-                        {
-                            Status = SourceStatus.NotLoaded,
-                            IsValid = false,
-                            ErrorMessage = "Google Sheets validation not yet implemented"
-                        };
+                        ValidateGoogleSheetsSource();
                         break;
                     default:
                         validationResult = new SourceValidationResult
@@ -454,47 +449,21 @@ namespace DataToScriptableObject.Editor.UI
 
         private void GenerateAssets()
         {
-            if (sourceType != SourceType.SQLite)
-            {
-                EditorUtility.DisplayDialog("Not Implemented",
-                    "Only SQLite import is currently implemented in Phase 2.",
-                    "OK");
-                return;
-            }
-
             try
             {
-                // Get selected tables
-                var selectedTableNames = tableSelections.Where(t => t.selected).Select(t => t.tableName).ToArray();
-                if (selectedTableNames.Length == 0)
+                switch (sourceType)
                 {
-                    EditorUtility.DisplayDialog("No Tables Selected",
-                        "Please select at least one table to import.",
-                        "OK");
-                    return;
-                }
-
-                // TODO: Implement full asset generation pipeline
-                // This would involve:
-                // 1. Extract schemas for selected tables
-                // 2. Generate code for each table
-                // 3. Trigger recompile
-                // 4. After recompile, populate assets using AssetPopulator with FK resolution
-                
-                EditorUtility.DisplayDialog("Generation Started",
-                    $"Generating assets for {selectedTableNames.Length} tables.\n\n" +
-                    "Note: Full asset generation pipeline not yet implemented.\n" +
-                    "Schemas will be extracted and validated.",
-                    "OK");
-
-                // For now, just validate we can extract schemas
-                var validator = new SQLiteValidator(sourceFilePath, settings);
-                var schemas = validator.ExtractSchemas();
-                
-                Debug.Log($"Successfully extracted {schemas.Length} table schemas in dependency order");
-                foreach (var schema in schemas)
-                {
-                    Debug.Log($"  - {schema.SourceTableName}: {schema.Columns.Length} columns, {schema.Rows.Count} rows");
+                    case SourceType.CSV:
+                        GenerateCSVAssets();
+                        break;
+                    case SourceType.SQLite:
+                        GenerateSQLiteAssets();
+                        break;
+                    default:
+                        EditorUtility.DisplayDialog("Not Implemented",
+                            $"{sourceType} import is not yet implemented.",
+                            "OK");
+                        break;
                 }
             }
             catch (Exception ex)
@@ -503,6 +472,77 @@ namespace DataToScriptableObject.Editor.UI
                     $"Failed to generate assets:\n\n{ex.Message}",
                     "OK");
                 Debug.LogError($"Asset generation failed: {ex}");
+            }
+        }
+
+        private void GenerateCSVAssets()
+        {
+            var validator = new CSVValidator(sourceFilePath, settings);
+            var schemas = validator.ExtractSchemas();
+
+            if (schemas == null || schemas.Length == 0)
+            {
+                EditorUtility.DisplayDialog("Generation Failed",
+                    "Failed to extract schema from CSV file.",
+                    "OK");
+                return;
+            }
+
+            var schema = schemas[0];
+
+            // Apply settings overrides if not set by directives
+            if (string.IsNullOrEmpty(schema.ClassName))
+                schema.ClassName = Path.GetFileNameWithoutExtension(sourceFilePath);
+            if (string.IsNullOrEmpty(schema.DatabaseName))
+                schema.DatabaseName = schema.ClassName + "Database";
+
+            var result = CodeGenerator.Generate(schema, settings);
+
+            Debug.Log($"Generated scripts for '{schema.ClassName}' ({schema.Columns.Length} columns, {schema.Rows.Count} rows)");
+            Debug.Log($"  Entry class: {result.EntryClassPath}");
+            Debug.Log($"  Database class: {result.DatabaseClassPath}");
+
+            EditorUtility.DisplayDialog("Generation Complete",
+                $"Generated scripts for '{schema.ClassName}':\n\n" +
+                $"• {schema.Columns.Length} columns, {schema.Rows.Count} rows\n" +
+                $"• Entry: {result.EntryClassPath}\n" +
+                $"• Database: {result.DatabaseClassPath}",
+                "OK");
+        }
+
+        private void GenerateSQLiteAssets()
+        {
+            // Get selected tables
+            var selectedTableNames = tableSelections.Where(t => t.selected).Select(t => t.tableName).ToArray();
+            if (selectedTableNames.Length == 0)
+            {
+                EditorUtility.DisplayDialog("No Tables Selected",
+                    "Please select at least one table to import.",
+                    "OK");
+                return;
+            }
+
+            // TODO: Implement full asset generation pipeline
+            // This would involve:
+            // 1. Extract schemas for selected tables
+            // 2. Generate code for each table
+            // 3. Trigger recompile
+            // 4. After recompile, populate assets using AssetPopulator with FK resolution
+            
+            EditorUtility.DisplayDialog("Generation Started",
+                $"Generating assets for {selectedTableNames.Length} tables.\n\n" +
+                "Note: Full asset generation pipeline not yet implemented.\n" +
+                "Schemas will be extracted and validated.",
+                "OK");
+
+            // For now, just validate we can extract schemas
+            var validator = new SQLiteValidator(sourceFilePath, settings);
+            var schemas = validator.ExtractSchemas();
+            
+            Debug.Log($"Successfully extracted {schemas.Length} table schemas in dependency order");
+            foreach (var schema in schemas)
+            {
+                Debug.Log($"  - {schema.SourceTableName}: {schema.Columns.Length} columns, {schema.Rows.Count} rows");
             }
         }
 

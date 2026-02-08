@@ -115,11 +115,10 @@ namespace DataToScriptableObject.Editor
                 }
 
                 // Build schema to validate data
-                var schemaBuilder = new SchemaBuilder();
                 TableSchema schema;
                 try
                 {
-                    schema = schemaBuilder.BuildSchema(rawData, settings);
+                    schema = SchemaBuilder.Build(rawData, settings);
                 }
                 catch (Exception ex)
                 {
@@ -178,8 +177,7 @@ namespace DataToScriptableObject.Editor
                     return new TableSchema[0];
                 }
 
-                var schemaBuilder = new SchemaBuilder();
-                var schema = schemaBuilder.BuildSchema(rawData, settings);
+                var schema = SchemaBuilder.Build(rawData, settings);
                 cachedSchemas = new TableSchema[] { schema };
                 return cachedSchemas;
             }
