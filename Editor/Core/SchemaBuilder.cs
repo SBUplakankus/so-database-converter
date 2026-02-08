@@ -118,7 +118,7 @@ namespace DataToScriptableObject.Editor
         {
             var column = new ColumnSchema
             {
-                OriginalHeader = originalHeader,
+                OriginalHeader = normalizedHeader,
                 FieldName = settings.SanitizeFieldNames 
                     ? NameSanitizer.SanitizeFieldName(normalizedHeader) 
                     : normalizedHeader,
@@ -289,6 +289,8 @@ namespace DataToScriptableObject.Editor
                             if (parts.Length == 2)
                                 column.Attributes["range"] = $"{parts[0].Trim()},{parts[1].Trim()}";
                         }
+                        else if (TryParseAttributeFlag(flag, "multiline", out var multilineValue))
+                            column.Attributes["multiline"] = multilineValue;
 
                         break;
                     }

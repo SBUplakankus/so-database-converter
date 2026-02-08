@@ -46,6 +46,18 @@ namespace DataToScriptableObject.Editor
             return string.IsNullOrEmpty(result) ? "unnamed" : result;
         }
 
+        public static string SanitizeNamespace(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            var segments = raw.Split('.');
+            for (int i = 0; i < segments.Length; i++)
+                segments[i] = SanitizeClassName(segments[i]);
+
+            return string.Join(".", segments);
+        }
+
         private static string SanitizeIdentifier(string raw, string defaultValue, NamingCase namingCase)
         {
             if (string.IsNullOrWhiteSpace(raw))

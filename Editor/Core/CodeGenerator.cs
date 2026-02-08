@@ -51,8 +51,10 @@ namespace DataToScriptableObject.Editor
         public static string GenerateScriptableObject(TableSchema schema, GenerationSettings settings)
         {
             var sanitizedClassName = NameSanitizer.SanitizeClassName(schema.ClassName);
+            var sanitizedDatabaseName = NameSanitizer.SanitizeClassName(schema.DatabaseName);
+            var sanitizedNamespace = NameSanitizer.SanitizeNamespace(schema.NamespaceName);
 
-            var builder = new CodeFileBuilder(schema.NamespaceName)
+            var builder = new CodeFileBuilder(sanitizedNamespace)
                 .WithHeader(settings)
                 .BeginNamespace();
             
@@ -83,8 +85,17 @@ namespace DataToScriptableObject.Editor
             foreach(var column in schema.Columns.Where(c => !c.IsSkipped))
                 AppendFieldDeclaration(builder, column, settings);
 
+            builder.EndClass();
+
+            if (!settings.SerializableClassMode)
+            {
+                builder.AppendLine();
+                builder.BeginScriptableObjectClass(sanitizedDatabaseName, settings);
+                builder.AppendLine($"public List<{sanitizedClassName}> entries;");
+                builder.EndClass();
+            }
+
             return builder
-                .EndClass()
                 .EndNamespace()
                 .Build();
         }
@@ -93,8 +104,9 @@ namespace DataToScriptableObject.Editor
         {
             var sanitizedClassName = NameSanitizer.SanitizeClassName(schema.ClassName);
             var sanitizedDatabaseName = NameSanitizer.SanitizeClassName(schema.DatabaseName);
+            var sanitizedNamespace = NameSanitizer.SanitizeNamespace(schema.NamespaceName);
 
-            return new CodeFileBuilder(schema.NamespaceName)
+            return new CodeFileBuilder(sanitizedNamespace)
                 .WithHeader(settings)
                 .BeginNamespace()
                 .BeginScriptableObjectClass(sanitizedDatabaseName, settings)
@@ -141,8 +153,13 @@ namespace DataToScriptableObject.Editor
         
         private static void AppendFieldDeclaration(CodeFileBuilder builder, ColumnSchema column, GenerationSettings settings)
         {
-            if (settings.GenerateTooltips && column.Attributes.TryGetValue("tooltip", out var columnAttribute))
-                builder.AppendLine($"[Tooltip(\"{columnAttribute}\")]");
+            if (settings.GenerateTooltips)
+            {
+                if (column.Attributes.TryGetValue("tooltip", out var tooltipText))
+                    builder.AppendLine($"[Tooltip(\"{tooltipText}\")]");
+                else
+                    builder.AppendLine($"[Tooltip(\"{column.OriginalHeader ?? column.FieldName}\")]");
+            }
 
             if (column.Attributes.ContainsKey("range"))
             {
@@ -156,6 +173,9 @@ namespace DataToScriptableObject.Editor
 
             if (column.Attributes.TryGetValue("header", out var attribute))
                 builder.AppendLine($"[Header(\"{attribute}\")]");
+
+            if (column.Attributes.TryGetValue("multiline", out var multilineLines))
+                builder.AppendLine($"[Multiline({multilineLines})]");
 
             var typeString = GetTypeString(column, settings);
 
