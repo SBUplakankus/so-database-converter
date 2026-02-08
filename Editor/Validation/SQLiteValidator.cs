@@ -11,28 +11,26 @@ namespace DataToScriptableObject.Editor
     /// </summary>
     public class SQLiteValidator : ISourceReader
     {
-        private readonly string filePath;
-        private readonly GenerationSettings settings;
-        private TableSchema[] cachedSchemas;
+        private readonly string _filePath;
+        private readonly GenerationSettings _settings;
+        private TableSchema[] _cachedSchemas;
 
         public SQLiteValidator(string filePath, GenerationSettings settings)
         {
-            this.filePath = filePath;
-            this.settings = settings;
+            _filePath = filePath;
+            _settings = settings;
         }
 
         public SourceValidationResult ValidateQuick()
         {
             var result = new SourceValidationResult();
 
-            // Check file exists
-            if (!File.Exists(filePath))
+            if (!File.Exists(_filePath))
             {
-                return CreateResult(SourceStatus.InvalidSource, $"File not found: {filePath}");
+                return CreateResult(SourceStatus.InvalidSource, $"File not found: {_filePath}");
             }
 
-            // Check extension (informational only)
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            var ext = Path.GetExtension(_filePath).ToLowerInvariant();
             var acceptedExtensions = new[] { ".db", ".sqlite", ".sqlite3", ".db3" };
             if (!acceptedExtensions.Contains(ext))
             {
@@ -44,21 +42,21 @@ namespace DataToScriptableObject.Editor
                 result.Warnings.Add(warning);
             }
 
-            // Read first 16 bytes to check SQLite magic header
             try
             {
-                using (var stream = File.OpenRead(filePath))
+                if (_filePath != null)
                 {
-                    byte[] header = new byte[16];
-                    int bytesRead = stream.Read(header, 0, 16);
-                    
+                    using var stream = File.OpenRead(_filePath);
+                    var header = new byte[16];
+                    var bytesRead = stream.Read(header, 0, 16);
+
                     if (bytesRead < 16)
                     {
-                        return CreateResult(SourceStatus.InvalidFormat, 
+                        return CreateResult(SourceStatus.InvalidFormat,
                             "File is too small to be a valid SQLite database.");
                     }
 
-                    string headerString = System.Text.Encoding.ASCII.GetString(header);
+                    var headerString = System.Text.Encoding.ASCII.GetString(header);
                     if (!headerString.StartsWith("SQLite format 3\0"))
                     {
                         return CreateResult(SourceStatus.InvalidFormat,
@@ -79,7 +77,6 @@ namespace DataToScriptableObject.Editor
                     $"Permission denied when reading file. {ex.Message}");
             }
 
-            // Basic checks passed - return the result we've been building
             result.Status = SourceStatus.Valid;
             result.IsValid = true;
             return result;
@@ -92,7 +89,7 @@ namespace DataToScriptableObject.Editor
             try
             {
                 // Try opening database
-                connection = new SQLiteConnection(filePath, SQLiteOpenFlags.ReadOnly);
+                connection = new SQLiteConnection(_filePath, SQLiteOpenFlags.ReadOnly);
 
                 // Query user tables
                 var tables = connection.Query<TableInfo>(
@@ -112,18 +109,17 @@ namespace DataToScriptableObject.Editor
                 }
 
                 var result = new SourceValidationResult();
-                int totalRows = 0;
-                int totalColumns = 0;
+                var totalRows = 0;
+                var totalColumns = 0;
                 var tableNames = new List<string>();
-                bool allEmpty = true;
+                var allEmpty = true;
 
                 foreach (var table in tables)
                 {
-                    tableNames.Add(table.name);
+                    tableNames.Add(table.Name);
 
-                    // Get row count
-                    var countCmd = connection.CreateCommand($"SELECT COUNT(*) FROM {table.name}");
-                    int rowCount = countCmd.ExecuteScalar<int>();
+                    var countCmd = connection.CreateCommand($"SELECT COUNT(*) FROM {table.Name}");
+                    var rowCount = countCmd.ExecuteScalar<int>();
                     totalRows += rowCount;
 
                     if (rowCount == 0)
@@ -131,8 +127,8 @@ namespace DataToScriptableObject.Editor
                         result.Warnings.Add(new ValidationWarning
                         {
                             level = WarningLevel.Info,
-                            table = table.name,
-                            message = $"Table '{table.name}' has 0 rows and will produce no assets."
+                            table = table.Name,
+                            message = $"Table '{table.Name}' has 0 rows and will produce no assets."
                         });
                     }
                     else
@@ -140,33 +136,27 @@ namespace DataToScriptableObject.Editor
                         allEmpty = false;
                     }
 
-                    // Get column count
-                    var columns = connection.Query<ColumnInfo>($"PRAGMA table_info({table.name})");
+                    var columns = connection.Query<ColumnInfo>($"PRAGMA table_info({table.Name})");
                     if (columns.Count == 0)
                     {
                         onComplete(CreateResult(SourceStatus.InvalidSchema,
-                            $"Cannot read schema for table '{table.name}'. The table may be corrupted."));
+                            $"Cannot read schema for table '{table.Name}'. The table may be corrupted."));
                         return;
                     }
                     totalColumns += columns.Count;
 
                     // Validate foreign keys
-                    var foreignKeys = connection.Query<ForeignKeyInfo>($"PRAGMA foreign_key_list({table.name})");
-                    foreach (var fk in foreignKeys)
+                    var foreignKeys = connection.Query<ForeignKeyInfo>($"PRAGMA foreign_key_list({table.Name})");
+                    foreach (var fk in from fk in foreignKeys let targetExists = tables.Any(t => t.Name == fk.Table) where !targetExists select fk)
                     {
-                        // Check if target table exists
-                        bool targetExists = tables.Any(t => t.name == fk.table);
-                        if (!targetExists)
+                        result.Warnings.Add(new ValidationWarning
                         {
-                            result.Warnings.Add(new ValidationWarning
-                            {
-                                level = WarningLevel.Warning,
-                                table = table.name,
-                                column = fk.from,
-                                message = $"Table '{table.name}' column '{fk.from}' references table '{fk.table}' " +
-                                         $"which does not exist in this database. The column will be imported as a plain integer."
-                            });
-                        }
+                            level = WarningLevel.Warning,
+                            table = table.Name,
+                            column = fk.From,
+                            message = $"Table '{table.Name}' column '{fk.From}' references table '{fk.Table}' " +
+                                      $"which does not exist in this database. The column will be imported as a plain integer."
+                        });
                     }
                 }
 
@@ -176,9 +166,8 @@ namespace DataToScriptableObject.Editor
                     return;
                 }
 
-                // Try to build schemas and check for dependency cycles
                 var reader = new SQLiteReader();
-                var readResult = reader.Read(filePath, settings);
+                var readResult = reader.Read(_filePath, _settings);
                 
                 if (!readResult.Success)
                 {
@@ -186,13 +175,11 @@ namespace DataToScriptableObject.Editor
                     return;
                 }
 
-                // Merge warnings
                 if (readResult.Warnings != null)
                 {
                     result.Warnings.AddRange(readResult.Warnings);
                 }
 
-                // Success
                 var finalResult = new SourceValidationResult
                 {
                     Status = SourceStatus.Valid,
@@ -225,21 +212,18 @@ namespace DataToScriptableObject.Editor
 
         public TableSchema[] ExtractSchemas()
         {
-            if (cachedSchemas != null)
+            if (_cachedSchemas != null)
             {
-                return cachedSchemas;
+                return _cachedSchemas;
             }
 
             var reader = new SQLiteReader();
-            var result = reader.Read(filePath, settings);
-            
-            if (result.Success)
-            {
-                cachedSchemas = result.Schemas;
-                return cachedSchemas;
-            }
+            var result = reader.Read(_filePath, _settings);
 
-            return new TableSchema[0];
+            if (!result.Success) return Array.Empty<TableSchema>();
+            _cachedSchemas = result.Schemas;
+            return _cachedSchemas;
+
         }
 
         private SourceValidationResult CreateResult(SourceStatus status, string errorMessage)
@@ -255,27 +239,27 @@ namespace DataToScriptableObject.Editor
         // Helper classes for SQLite query results
         private class TableInfo
         {
-            public string name { get; set; }
-            public string sql { get; set; }
+            public string Name { get; set; }
+            public string Sql { get; set; }
         }
 
         private class ColumnInfo
         {
-            public int cid { get; set; }
-            public string name { get; set; }
-            public string type { get; set; }
-            public int notnull { get; set; }
-            public string dflt_value { get; set; }
-            public int pk { get; set; }
+            public int Cid { get; set; }
+            public string Name { get; set; }
+            public string Type { get; set; }
+            public int Notnull { get; set; }
+            public string DefaultValue { get; set; }
+            public int Pk { get; set; }
         }
 
         private class ForeignKeyInfo
         {
-            public int id { get; set; }
-            public int seq { get; set; }
-            public string table { get; set; }
-            public string from { get; set; }
-            public string to { get; set; }
+            public int ID { get; set; }
+            public int Seq { get; set; }
+            public string Table { get; set; }
+            public string From { get; set; }
+            public string To { get; set; }
         }
     }
 }

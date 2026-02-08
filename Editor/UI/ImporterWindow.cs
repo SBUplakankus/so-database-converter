@@ -15,27 +15,27 @@ namespace DataToScriptableObject.Editor.UI
         private enum GenerationMode { GenerateNew, UseExisting }
 
         // Source selection
-        private SourceType sourceType = SourceType.CSV;
-        private string sourceFilePath = "";
-        private UnityEngine.Object sourceFileObject;
+        private SourceType _sourceType = SourceType.CSV;
+        private string _sourceFilePath = "";
+        private UnityEngine.Object _sourceFileObject;
 
         // Validation
-        private SourceValidationResult validationResult;
-        private bool isValidating = false;
+        private SourceValidationResult _validationResult;
+        private bool _isValidating;
 
         // SQLite-specific
-        private List<TableSelectionInfo> tableSelections = new List<TableSelectionInfo>();
+        private readonly List<TableSelectionInfo> _tableSelections = new();
 
         // Google Sheets - cached downloaded CSV text
-        private string cachedGoogleSheetsCSV;
+        private string _cachedGoogleSheetsCsv;
 
         // Generation settings
-        private GenerationMode generationMode = GenerationMode.GenerateNew;
-        private GenerationSettings settings = new GenerationSettings();
+        private GenerationMode _generationMode = GenerationMode.GenerateNew;
+        private readonly GenerationSettings _settings = new();
 
         // UI state
-        private Vector2 scrollPosition;
-        private bool showAdvancedOptions = false;
+        private Vector2 _scrollPosition;
+        private bool _showAdvancedOptions;
 
         [MenuItem("Tools/Data to ScriptableObject")]
         public static void ShowWindow()
@@ -57,14 +57,14 @@ namespace DataToScriptableObject.Editor.UI
 
         private void OnGUI()
         {
-            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             DrawHeader();
             DrawSourceSelection();
 
-            if (validationResult != null && validationResult.IsValid)
+            if (_validationResult != null && _validationResult.IsValid)
             {
-                if (sourceType == SourceType.SQLite)
+                if (_sourceType == SourceType.SQLite)
                 {
                     DrawSQLiteTableSelection();
                     DrawSQLiteDependencyVisualization();
@@ -95,17 +95,17 @@ namespace DataToScriptableObject.Editor.UI
             EditorGUILayout.LabelField("Source Type", EditorStyles.boldLabel);
 
             EditorGUI.BeginChangeCheck();
-            sourceType = (SourceType)EditorGUILayout.EnumPopup("Type", sourceType);
+            _sourceType = (SourceType)EditorGUILayout.EnumPopup("Type", _sourceType);
             if (EditorGUI.EndChangeCheck())
             {
-                validationResult = null;
-                tableSelections.Clear();
-                cachedGoogleSheetsCSV = null;
+                _validationResult = null;
+                _tableSelections.Clear();
+                _cachedGoogleSheetsCsv = null;
             }
 
             EditorGUILayout.Space(5);
 
-            switch (sourceType)
+            switch (_sourceType)
             {
                 case SourceType.CSV:
                     DrawCSVSourceUI();
@@ -126,13 +126,13 @@ namespace DataToScriptableObject.Editor.UI
             EditorGUILayout.HelpBox("CSV import - Select a CSV file to import.", MessageType.Info);
 
             EditorGUI.BeginChangeCheck();
-            sourceFileObject = EditorGUILayout.ObjectField("CSV File", sourceFileObject, typeof(UnityEngine.Object), false);
-            if (EditorGUI.EndChangeCheck() && sourceFileObject != null)
+            _sourceFileObject = EditorGUILayout.ObjectField("CSV File", _sourceFileObject, typeof(UnityEngine.Object), false);
+            if (EditorGUI.EndChangeCheck() && _sourceFileObject != null)
             {
-                string assetPath = AssetDatabase.GetAssetPath(sourceFileObject);
+                string assetPath = AssetDatabase.GetAssetPath(_sourceFileObject);
                 if (!string.IsNullOrEmpty(assetPath))
                 {
-                    sourceFilePath = ConvertAssetPathToAbsolute(assetPath);
+                    _sourceFilePath = ConvertAssetPathToAbsolute(assetPath);
                     ValidateSource();
                 }
             }
@@ -146,8 +146,8 @@ namespace DataToScriptableObject.Editor.UI
                 MessageType.Info);
 
             EditorGUI.BeginChangeCheck();
-            sourceFilePath = EditorGUILayout.TextField("Sheets URL", sourceFilePath);
-            if (EditorGUI.EndChangeCheck() && !string.IsNullOrEmpty(sourceFilePath))
+            _sourceFilePath = EditorGUILayout.TextField("Sheets URL", _sourceFilePath);
+            if (EditorGUI.EndChangeCheck() && !string.IsNullOrEmpty(_sourceFilePath))
             {
                 ValidateSource();
             }
@@ -159,13 +159,13 @@ namespace DataToScriptableObject.Editor.UI
 
             EditorGUILayout.BeginHorizontal();
             EditorGUI.BeginChangeCheck();
-            sourceFileObject = EditorGUILayout.ObjectField("Database File", sourceFileObject, typeof(DefaultAsset), false);
-            if (EditorGUI.EndChangeCheck() && sourceFileObject != null)
+            _sourceFileObject = EditorGUILayout.ObjectField("Database File", _sourceFileObject, typeof(DefaultAsset), false);
+            if (EditorGUI.EndChangeCheck() && _sourceFileObject != null)
             {
-                string assetPath = AssetDatabase.GetAssetPath(sourceFileObject);
+                string assetPath = AssetDatabase.GetAssetPath(_sourceFileObject);
                 if (!string.IsNullOrEmpty(assetPath))
                 {
-                    sourceFilePath = ConvertAssetPathToAbsolute(assetPath);
+                    _sourceFilePath = ConvertAssetPathToAbsolute(assetPath);
                     ValidateSource();
                 }
             }
@@ -175,15 +175,15 @@ namespace DataToScriptableObject.Editor.UI
                 string path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "db,sqlite,sqlite3,db3");
                 if (!string.IsNullOrEmpty(path))
                 {
-                    sourceFilePath = path;
+                    _sourceFilePath = path;
                     ValidateSource();
                 }
             }
             EditorGUILayout.EndHorizontal();
 
-            if (!string.IsNullOrEmpty(sourceFilePath))
+            if (!string.IsNullOrEmpty(_sourceFilePath))
             {
-                EditorGUILayout.LabelField("Path", sourceFilePath, EditorStyles.wordWrappedMiniLabel);
+                EditorGUILayout.LabelField("Path", _sourceFilePath, EditorStyles.wordWrappedMiniLabel);
             }
         }
 
@@ -192,20 +192,20 @@ namespace DataToScriptableObject.Editor.UI
             EditorGUILayout.Space(10);
             EditorGUILayout.LabelField("Table Selection", EditorStyles.boldLabel);
 
-            if (tableSelections.Count == 0)
+            if (_tableSelections.Count == 0)
             {
                 EditorGUILayout.HelpBox("No tables found in database.", MessageType.Warning);
                 return;
             }
 
             EditorGUILayout.HelpBox(
-                $"Found {tableSelections.Count} tables. Select which tables to import. " +
+                $"Found {_tableSelections.Count} tables. Select which tables to import. " +
                 "Tables will be processed in dependency order to resolve foreign keys.",
                 MessageType.Info);
 
             EditorGUILayout.Space(5);
 
-            foreach (var tableInfo in tableSelections)
+            foreach (var tableInfo in _tableSelections)
             {
                 EditorGUILayout.BeginHorizontal();
                 tableInfo.selected = EditorGUILayout.Toggle(tableInfo.selected, GUILayout.Width(20));
@@ -224,10 +224,10 @@ namespace DataToScriptableObject.Editor.UI
 
         private void DrawSQLiteDependencyVisualization()
         {
-            if (sourceType != SourceType.SQLite || tableSelections.Count == 0)
+            if (_sourceType != SourceType.SQLite || _tableSelections.Count == 0)
                 return;
 
-            var selectedTables = tableSelections.Where(t => t.selected).ToList();
+            var selectedTables = _tableSelections.Where(t => t.selected).ToList();
             if (selectedTables.Count == 0)
                 return;
 
@@ -258,62 +258,62 @@ namespace DataToScriptableObject.Editor.UI
             EditorGUILayout.Space(10);
             EditorGUILayout.LabelField("Generation Settings", EditorStyles.boldLabel);
 
-            generationMode = (GenerationMode)EditorGUILayout.EnumPopup("Mode", generationMode);
+            _generationMode = (GenerationMode)EditorGUILayout.EnumPopup("Mode", _generationMode);
 
-            if (generationMode == GenerationMode.GenerateNew)
+            if (_generationMode == GenerationMode.GenerateNew)
             {
-                settings.NamespaceName = EditorGUILayout.TextField("Namespace", settings.NamespaceName);
-                settings.ScriptOutputPath = EditorGUILayout.TextField("Script Output", settings.ScriptOutputPath);
+                _settings.NamespaceName = EditorGUILayout.TextField("Namespace", _settings.NamespaceName);
+                _settings.ScriptOutputPath = EditorGUILayout.TextField("Script Output", _settings.ScriptOutputPath);
             }
 
-            settings.AssetOutputPath = EditorGUILayout.TextField("Asset Output", settings.AssetOutputPath);
-            settings.GenerateDatabaseContainer = EditorGUILayout.Toggle("Generate Database", settings.GenerateDatabaseContainer);
+            _settings.AssetOutputPath = EditorGUILayout.TextField("Asset Output", _settings.AssetOutputPath);
+            _settings.GenerateDatabaseContainer = EditorGUILayout.Toggle("Generate Database", _settings.GenerateDatabaseContainer);
         }
 
         private void DrawAdvancedOptions()
         {
             EditorGUILayout.Space(10);
-            showAdvancedOptions = EditorGUILayout.Foldout(showAdvancedOptions, "Advanced Options", true);
+            _showAdvancedOptions = EditorGUILayout.Foldout(_showAdvancedOptions, "Advanced Options", true);
 
-            if (showAdvancedOptions)
+            if (_showAdvancedOptions)
             {
                 EditorGUI.indentLevel++;
-                settings.UseListInsteadOfArray = EditorGUILayout.Toggle("Use List Instead of Array", settings.UseListInsteadOfArray);
-                settings.GenerateTooltips = EditorGUILayout.Toggle("Generate Tooltips", settings.GenerateTooltips);
-                settings.OverwriteExistingAssets = EditorGUILayout.Toggle("Overwrite Existing", settings.OverwriteExistingAssets);
-                settings.SanitizeFieldNames = EditorGUILayout.Toggle("Sanitize Field Names", settings.SanitizeFieldNames);
+                _settings.UseListInsteadOfArray = EditorGUILayout.Toggle("Use List Instead of Array", _settings.UseListInsteadOfArray);
+                _settings.GenerateTooltips = EditorGUILayout.Toggle("Generate Tooltips", _settings.GenerateTooltips);
+                _settings.OverwriteExistingAssets = EditorGUILayout.Toggle("Overwrite Existing", _settings.OverwriteExistingAssets);
+                _settings.SanitizeFieldNames = EditorGUILayout.Toggle("Sanitize Field Names", _settings.SanitizeFieldNames);
                 EditorGUI.indentLevel--;
             }
         }
 
         private void DrawValidationStatus()
         {
-            if (isValidating)
+            if (_isValidating)
             {
                 EditorGUILayout.HelpBox("Validating...", MessageType.Info);
                 return;
             }
 
-            if (validationResult == null)
+            if (_validationResult == null)
                 return;
 
             EditorGUILayout.Space(10);
 
-            if (validationResult.IsValid)
+            if (_validationResult.IsValid)
             {
                 string message = "Valid source";
-                if (validationResult.TableCount > 0)
-                    message += $": {validationResult.TableCount} table(s), {validationResult.TotalRowCount} rows";
+                if (_validationResult.TableCount > 0)
+                    message += $": {_validationResult.TableCount} table(s), {_validationResult.TotalRowCount} rows";
                 EditorGUILayout.HelpBox(message, MessageType.Info);
             }
             else
             {
-                EditorGUILayout.HelpBox(validationResult.ErrorMessage, MessageType.Error);
+                EditorGUILayout.HelpBox(_validationResult.ErrorMessage, MessageType.Error);
             }
 
-            if (validationResult.Warnings != null && validationResult.Warnings.Count > 0)
+            if (_validationResult.Warnings != null && _validationResult.Warnings.Count > 0)
             {
-                foreach (var warning in validationResult.Warnings)
+                foreach (var warning in _validationResult.Warnings)
                 {
                     MessageType msgType = warning.level == WarningLevel.Error ? MessageType.Error :
                                          warning.level == WarningLevel.Warning ? MessageType.Warning :
@@ -327,10 +327,10 @@ namespace DataToScriptableObject.Editor.UI
         {
             EditorGUILayout.Space(10);
 
-            GUI.enabled = validationResult != null && validationResult.IsValid;
+            GUI.enabled = _validationResult != null && _validationResult.IsValid;
 
-            if (sourceType == SourceType.SQLite)
-                GUI.enabled = GUI.enabled && tableSelections.Any(t => t.selected);
+            if (_sourceType == SourceType.SQLite)
+                GUI.enabled = GUI.enabled && _tableSelections.Any(t => t.selected);
 
             if (GUILayout.Button("Generate", GUILayout.Height(40)))
                 GenerateAssets();
@@ -344,14 +344,14 @@ namespace DataToScriptableObject.Editor.UI
 
         private void ValidateSource()
         {
-            isValidating = true;
-            validationResult = null;
-            tableSelections.Clear();
-            cachedGoogleSheetsCSV = null;
+            _isValidating = true;
+            _validationResult = null;
+            _tableSelections.Clear();
+            _cachedGoogleSheetsCsv = null;
 
             try
             {
-                switch (sourceType)
+                switch (_sourceType)
                 {
                     case SourceType.CSV:
                         ValidateCSVSource();
@@ -366,7 +366,7 @@ namespace DataToScriptableObject.Editor.UI
             }
             catch (Exception ex)
             {
-                validationResult = new SourceValidationResult
+                _validationResult = new SourceValidationResult
                 {
                     Status = SourceStatus.InvalidFormat,
                     IsValid = false,
@@ -375,44 +375,44 @@ namespace DataToScriptableObject.Editor.UI
             }
             finally
             {
-                isValidating = false;
+                _isValidating = false;
                 Repaint();
             }
         }
 
         private void ValidateCSVSource()
         {
-            var validator = new CSVValidator(sourceFilePath, settings);
+            var validator = new CSVValidator(_sourceFilePath, _settings);
 
-            validationResult = validator.ValidateQuick();
-            if (!validationResult.IsValid)
+            _validationResult = validator.ValidateQuick();
+            if (!_validationResult.IsValid)
                 return;
 
             validator.ValidateFull(result =>
             {
-                validationResult = result;
+                _validationResult = result;
                 Repaint();
             });
         }
 
         private void ValidateSQLiteSource()
         {
-            var validator = new SQLiteValidator(sourceFilePath, settings);
+            var validator = new SQLiteValidator(_sourceFilePath, _settings);
 
-            validationResult = validator.ValidateQuick();
-            if (!validationResult.IsValid)
+            _validationResult = validator.ValidateQuick();
+            if (!_validationResult.IsValid)
                 return;
 
             validator.ValidateFull(result =>
             {
-                validationResult = result;
+                _validationResult = result;
 
                 if (result.IsValid && result.TableNames != null)
                 {
-                    tableSelections.Clear();
+                    _tableSelections.Clear();
                     for (int i = 0; i < result.TableNames.Length; i++)
                     {
-                        tableSelections.Add(new TableSelectionInfo
+                        _tableSelections.Add(new TableSelectionInfo
                         {
                             tableName = result.TableNames[i],
                             selected = true,
@@ -429,10 +429,10 @@ namespace DataToScriptableObject.Editor.UI
 
         private void ValidateGoogleSheetsSource()
         {
-            var parseResult = GoogleSheetsURLParser.Parse(sourceFilePath);
+            var parseResult = GoogleSheetsURLParser.Parse(_sourceFilePath);
             if (!parseResult.IsValid)
             {
-                validationResult = new SourceValidationResult
+                _validationResult = new SourceValidationResult
                 {
                     Status = SourceStatus.InvalidSource,
                     IsValid = false,
@@ -453,7 +453,7 @@ namespace DataToScriptableObject.Editor.UI
             }
             catch (System.Net.WebException ex)
             {
-                validationResult = new SourceValidationResult
+                _validationResult = new SourceValidationResult
                 {
                     Status = SourceStatus.NetworkError,
                     IsValid = false,
@@ -465,7 +465,7 @@ namespace DataToScriptableObject.Editor.UI
 
             if (string.IsNullOrWhiteSpace(csvText))
             {
-                validationResult = new SourceValidationResult
+                _validationResult = new SourceValidationResult
                 {
                     Status = SourceStatus.InvalidContent,
                     IsValid = false,
@@ -474,12 +474,12 @@ namespace DataToScriptableObject.Editor.UI
                 return;
             }
 
-            cachedGoogleSheetsCSV = csvText;
+            _cachedGoogleSheetsCsv = csvText;
 
-            var rawData = CSVReader.Parse(csvText, ",", settings.CommentPrefix, settings.HeaderRowCount);
+            var rawData = CSVReader.Parse(csvText, ",", _settings.CommentPrefix, _settings.HeaderRowCount);
             if (rawData == null || rawData.Headers == null || rawData.Headers.Length == 0)
             {
-                validationResult = new SourceValidationResult
+                _validationResult = new SourceValidationResult
                 {
                     Status = SourceStatus.InvalidContent,
                     IsValid = false,
@@ -491,11 +491,11 @@ namespace DataToScriptableObject.Editor.UI
             TableSchema schema;
             try
             {
-                schema = SchemaBuilder.Build(rawData, settings);
+                schema = SchemaBuilder.Build(rawData, _settings);
             }
             catch (Exception ex)
             {
-                validationResult = new SourceValidationResult
+                _validationResult = new SourceValidationResult
                 {
                     Status = SourceStatus.InvalidSchema,
                     IsValid = false,
@@ -504,7 +504,7 @@ namespace DataToScriptableObject.Editor.UI
                 return;
             }
 
-            validationResult = new SourceValidationResult
+            _validationResult = new SourceValidationResult
             {
                 Status = SourceStatus.Valid,
                 IsValid = true,
@@ -523,7 +523,7 @@ namespace DataToScriptableObject.Editor.UI
         {
             try
             {
-                switch (sourceType)
+                switch (_sourceType)
                 {
                     case SourceType.CSV:
                         GenerateCSVAssets();
@@ -546,7 +546,7 @@ namespace DataToScriptableObject.Editor.UI
 
         private void GenerateCSVAssets()
         {
-            var validator = new CSVValidator(sourceFilePath, settings);
+            var validator = new CSVValidator(_sourceFilePath, _settings);
             var schemas = validator.ExtractSchemas();
 
             if (schemas == null || schemas.Length == 0)
@@ -559,11 +559,11 @@ namespace DataToScriptableObject.Editor.UI
             var schema = schemas[0];
 
             if (string.IsNullOrEmpty(schema.ClassName))
-                schema.ClassName = Path.GetFileNameWithoutExtension(sourceFilePath);
+                schema.ClassName = Path.GetFileNameWithoutExtension(_sourceFilePath);
             if (string.IsNullOrEmpty(schema.DatabaseName))
                 schema.DatabaseName = schema.ClassName + "Database";
 
-            var result = CodeGenerator.Generate(schema, settings);
+            var result = CodeGenerator.Generate(schema, _settings);
 
             Debug.Log($"Generated scripts for '{schema.ClassName}' ({schema.Columns.Length} columns, {schema.Rows.Count} rows)");
             EditorUtility.DisplayDialog("Generation Complete",
@@ -575,14 +575,14 @@ namespace DataToScriptableObject.Editor.UI
 
         private void GenerateGoogleSheetsAssets()
         {
-            if (string.IsNullOrEmpty(cachedGoogleSheetsCSV))
+            if (string.IsNullOrEmpty(_cachedGoogleSheetsCsv))
             {
                 EditorUtility.DisplayDialog("Generation Failed",
                     "No cached Google Sheets data. Please re-validate the source.", "OK");
                 return;
             }
 
-            var rawData = CSVReader.Parse(cachedGoogleSheetsCSV, ",", settings.CommentPrefix, settings.HeaderRowCount);
+            var rawData = CSVReader.Parse(_cachedGoogleSheetsCsv, ",", _settings.CommentPrefix, _settings.HeaderRowCount);
             if (rawData == null || rawData.Headers == null || rawData.Headers.Length == 0)
             {
                 EditorUtility.DisplayDialog("Generation Failed",
@@ -590,14 +590,14 @@ namespace DataToScriptableObject.Editor.UI
                 return;
             }
 
-            var schema = SchemaBuilder.Build(rawData, settings);
+            var schema = SchemaBuilder.Build(rawData, _settings);
 
             if (string.IsNullOrEmpty(schema.ClassName))
                 schema.ClassName = "GoogleSheetsEntry";
             if (string.IsNullOrEmpty(schema.DatabaseName))
                 schema.DatabaseName = schema.ClassName + "Database";
 
-            var result = CodeGenerator.Generate(schema, settings);
+            var result = CodeGenerator.Generate(schema, _settings);
 
             Debug.Log($"Generated scripts from Google Sheet '{schema.ClassName}' ({schema.Columns.Length} columns, {schema.Rows.Count} rows)");
             EditorUtility.DisplayDialog("Generation Complete",
@@ -609,7 +609,7 @@ namespace DataToScriptableObject.Editor.UI
 
         private void GenerateSQLiteAssets()
         {
-            var selectedTableNames = tableSelections.Where(t => t.selected).Select(t => t.tableName).ToArray();
+            var selectedTableNames = _tableSelections.Where(t => t.selected).Select(t => t.tableName).ToArray();
             if (selectedTableNames.Length == 0)
             {
                 EditorUtility.DisplayDialog("No Tables Selected",
@@ -617,7 +617,7 @@ namespace DataToScriptableObject.Editor.UI
                 return;
             }
 
-            var validator = new SQLiteValidator(sourceFilePath, settings);
+            var validator = new SQLiteValidator(_sourceFilePath, _settings);
             var schemas = validator.ExtractSchemas();
 
             if (schemas == null || schemas.Length == 0)
@@ -631,7 +631,7 @@ namespace DataToScriptableObject.Editor.UI
 
             foreach (var schema in selectedSchemas)
             {
-                CodeGenerator.Generate(schema, settings);
+                CodeGenerator.Generate(schema, _settings);
                 Debug.Log($"  Generated: {schema.ClassName} ({schema.Columns.Length} columns, {schema.Rows.Count} rows)");
             }
 
@@ -648,32 +648,30 @@ namespace DataToScriptableObject.Editor.UI
 
         private void LoadSettings()
         {
-            settings.ScriptOutputPath = EditorPrefs.GetString("D2SO_ScriptOutputPath", "Assets/Scripts/Generated/");
-            settings.AssetOutputPath = EditorPrefs.GetString("D2SO_AssetOutputPath", "Assets/Data/");
-            settings.NamespaceName = EditorPrefs.GetString("D2SO_Namespace", "");
-            settings.GenerateTooltips = EditorPrefs.GetBool("D2SO_GenerateTooltips", false);
-            settings.SanitizeFieldNames = EditorPrefs.GetBool("D2SO_SanitizeFieldNames", true);
-            settings.UseListInsteadOfArray = EditorPrefs.GetBool("D2SO_UseList", true);
+            _settings.ScriptOutputPath = EditorPrefs.GetString("D2SO_ScriptOutputPath", "Assets/Scripts/Generated/");
+            _settings.AssetOutputPath = EditorPrefs.GetString("D2SO_AssetOutputPath", "Assets/Data/");
+            _settings.NamespaceName = EditorPrefs.GetString("D2SO_Namespace", "");
+            _settings.GenerateTooltips = EditorPrefs.GetBool("D2SO_GenerateTooltips", false);
+            _settings.SanitizeFieldNames = EditorPrefs.GetBool("D2SO_SanitizeFieldNames", true);
+            _settings.UseListInsteadOfArray = EditorPrefs.GetBool("D2SO_UseList", true);
         }
 
         private void SaveSettings()
         {
-            EditorPrefs.SetString("D2SO_ScriptOutputPath", settings.ScriptOutputPath);
-            EditorPrefs.SetString("D2SO_AssetOutputPath", settings.AssetOutputPath);
-            EditorPrefs.SetString("D2SO_Namespace", settings.NamespaceName ?? "");
-            EditorPrefs.SetBool("D2SO_GenerateTooltips", settings.GenerateTooltips);
-            EditorPrefs.SetBool("D2SO_SanitizeFieldNames", settings.SanitizeFieldNames);
-            EditorPrefs.SetBool("D2SO_UseList", settings.UseListInsteadOfArray);
+            EditorPrefs.SetString("D2SO_ScriptOutputPath", _settings.ScriptOutputPath);
+            EditorPrefs.SetString("D2SO_AssetOutputPath", _settings.AssetOutputPath);
+            EditorPrefs.SetString("D2SO_Namespace", _settings.NamespaceName ?? "");
+            EditorPrefs.SetBool("D2SO_GenerateTooltips", _settings.GenerateTooltips);
+            EditorPrefs.SetBool("D2SO_SanitizeFieldNames", _settings.SanitizeFieldNames);
+            EditorPrefs.SetBool("D2SO_UseList", _settings.UseListInsteadOfArray);
         }
 
-        private string ConvertAssetPathToAbsolute(string assetPath)
+        private static string ConvertAssetPathToAbsolute(string assetPath)
         {
-            if (assetPath.StartsWith("Assets/") || assetPath.StartsWith("Packages/"))
-            {
-                string projectRoot = Path.GetDirectoryName(Application.dataPath);
-                return Path.GetFullPath(Path.Combine(projectRoot, assetPath));
-            }
-            return Path.GetFullPath(assetPath);
+            if (!assetPath.StartsWith("Assets/") && !assetPath.StartsWith("Packages/"))
+                return Path.GetFullPath(assetPath);
+            var projectRoot = Path.GetDirectoryName(Application.dataPath);
+            return Path.GetFullPath(Path.Combine(projectRoot, assetPath));
         }
 
         #endregion

@@ -8,14 +8,14 @@ namespace DataToScriptableObject.Editor
     /// </summary>
     public class CSVValidator : ISourceReader
     {
-        private readonly string filePath;
-        private readonly GenerationSettings settings;
-        private TableSchema[] cachedSchemas;
+        private readonly string _filePath;
+        private readonly GenerationSettings _settings;
+        private TableSchema[] _cachedSchemas;
 
         public CSVValidator(string filePath, GenerationSettings settings)
         {
-            this.filePath = filePath;
-            this.settings = settings;
+            _filePath = filePath;
+            _settings = settings;
         }
 
         public SourceValidationResult ValidateQuick()
@@ -23,13 +23,13 @@ namespace DataToScriptableObject.Editor
             var result = new SourceValidationResult();
 
             // Check file exists
-            if (!File.Exists(filePath))
+            if (!File.Exists(_filePath))
             {
-                return CreateResult(SourceStatus.InvalidSource, $"File not found: {filePath}");
+                return CreateResult(SourceStatus.InvalidSource, $"File not found: {_filePath}");
             }
 
             // Check extension
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            var ext = Path.GetExtension(_filePath).ToLowerInvariant();
             if (ext != ".csv" && ext != ".txt")
             {
                 var warning = new ValidationWarning
@@ -43,8 +43,9 @@ namespace DataToScriptableObject.Editor
             // Check file can be opened
             try
             {
-                using (var stream = File.OpenRead(filePath))
+                if (_filePath != null)
                 {
+                    using var stream = File.OpenRead(_filePath);
                     if (stream.Length == 0)
                     {
                         return CreateResult(SourceStatus.InvalidContent, "File is empty.");
@@ -73,12 +74,12 @@ namespace DataToScriptableObject.Editor
             try
             {
                 // Try parsing the CSV file
-                var csvText = File.ReadAllText(filePath);
+                var csvText = File.ReadAllText(_filePath);
                 var rawData = CSVReader.Parse(
                     csvText,
                     ",",  // Default delimiter - could be made configurable
-                    settings.CommentPrefix,
-                    settings.HeaderRowCount
+                    _settings.CommentPrefix,
+                    _settings.HeaderRowCount
                 );
 
                 if (rawData == null)
@@ -118,7 +119,7 @@ namespace DataToScriptableObject.Editor
                 TableSchema schema;
                 try
                 {
-                    schema = SchemaBuilder.Build(rawData, settings);
+                    schema = SchemaBuilder.Build(rawData, _settings);
                 }
                 catch (Exception ex)
                 {
@@ -127,10 +128,8 @@ namespace DataToScriptableObject.Editor
                     return;
                 }
 
-                // Cache the schema for ExtractSchemas
-                cachedSchemas = new TableSchema[] { schema };
+                _cachedSchemas = new TableSchema[] { schema };
 
-                // Success - return validation result
                 var finalResult = new SourceValidationResult
                 {
                     Status = SourceStatus.Valid,
@@ -157,19 +156,19 @@ namespace DataToScriptableObject.Editor
 
         public TableSchema[] ExtractSchemas()
         {
-            if (cachedSchemas != null)
+            if (_cachedSchemas != null)
             {
-                return cachedSchemas;
+                return _cachedSchemas;
             }
 
             try
             {
-                var csvText = File.ReadAllText(filePath);
+                var csvText = File.ReadAllText(_filePath);
                 var rawData = CSVReader.Parse(
                     csvText,
                     ",",
-                    settings.CommentPrefix,
-                    settings.HeaderRowCount
+                    _settings.CommentPrefix,
+                    _settings.HeaderRowCount
                 );
 
                 if (rawData == null)
@@ -177,14 +176,14 @@ namespace DataToScriptableObject.Editor
                     return new TableSchema[0];
                 }
 
-                var schema = SchemaBuilder.Build(rawData, settings);
-                cachedSchemas = new TableSchema[] { schema };
-                return cachedSchemas;
+                var schema = SchemaBuilder.Build(rawData, _settings);
+                _cachedSchemas = new TableSchema[] { schema };
+                return _cachedSchemas;
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"Failed to extract schemas from CSV file '{filePath}': {ex.Message}");
-                return new TableSchema[0];
+                UnityEngine.Debug.LogError($"Failed to extract schemas from CSV file '{_filePath}': {ex.Message}");
+                return Array.Empty<TableSchema>();
             }
         }
 
